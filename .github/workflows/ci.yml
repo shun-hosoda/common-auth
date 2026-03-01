@@ -1,0 +1,77 @@
+# CI/CD Pipeline Template
+# プロジェクトの技術スタックに合わせて編集してください。
+#
+# 使用例:
+#   Node.js: npm ci && npm test && npm run lint
+#   Python:  pip install -r requirements.txt && pytest && ruff check .
+#   Go:      go test ./... && golangci-lint run
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Node.js の場合 ---
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '20'
+      #     cache: 'npm'
+      # - run: npm ci
+      # - run: npm run lint
+
+      # --- Python の場合 ---
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+      # - run: pip install -r requirements.txt
+      # - run: ruff check .
+
+      - run: echo "Configure linting for your project"
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Node.js の場合 ---
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '20'
+      #     cache: 'npm'
+      # - run: npm ci
+      # - run: npm test
+
+      # --- Python の場合 ---
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+      # - run: pip install -r requirements.txt
+      # - run: pytest --cov
+
+      - run: echo "Configure testing for your project"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- ビルド & デプロイ ---
+      # - run: npm run build
+      # - run: docker build -t app .
+
+      - run: echo "Configure build for your project"

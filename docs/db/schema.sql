@@ -1,0 +1,23 @@
+-- =============================================================
+-- DB Schema Template
+-- =============================================================
+-- このファイルはデータベース設計の正（Single Source of Truth）です。
+-- テーブル追加・変更時は必ずこのファイルを先に更新してください。
+--
+-- 命名規約:
+--   テーブル名: snake_case, 複数形 (例: users, order_items)
+--   カラム名:   snake_case (例: created_at, user_id)
+--   外部キー:   {参照先テーブル名の単数形}_id (例: user_id)
+--   インデックス: idx_{テーブル名}_{カラム名}
+-- =============================================================
+
+-- 例: ユーザーテーブル
+-- CREATE TABLE users (
+--     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     email       VARCHAR(255) NOT NULL UNIQUE,
+--     name        VARCHAR(100) NOT NULL,
+--     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+--     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+-- );
+--
+-- CREATE INDEX idx_users_email ON users(email);

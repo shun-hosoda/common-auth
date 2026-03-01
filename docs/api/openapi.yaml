@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: API Specification
+  version: 0.1.0
+  description: |
+    API仕様書テンプレート。
+    実装前にエンドポイントを定義し、設計レビューを通過すること。
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+paths: {}
+  # /example:
+  #   get:
+  #     summary: サンプルエンドポイント
+  #     operationId: getExample
+  #     tags: [example]
+  #     responses:
+  #       '200':
+  #         description: 成功
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/ExampleResponse'
+
+components:
+  schemas: {}
+    # ExampleResponse:
+    #   type: object
+    #   required: [id, name]
+    #   properties:
+    #     id:
+    #       type: string
+    #       format: uuid
+    #     name:
+    #       type: string

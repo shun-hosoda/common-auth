@@ -1,0 +1,202 @@
+---
+description: スラッシュコマンドの定義。ユーザーが /review, /fix, /re-review, /push, /comment を入力した際に発動。
+alwaysApply: true
+---
+
+# スラッシュコマンド
+
+ユーザーが以下のコマンドを入力した場合、対応するワークフローを即座に実行する。
+
+---
+
+## `/design`
+
+**設計会議を開催し、API・DB・セキュリティ設計を議論する。**
+
+### 手順
+1. `docs/review/persona.md` を読み、ドメインペルソナを確認する
+2. `docs/prd/prd.md` から要件を確認する
+3. `.cursor/skills/design-board/SKILL.md` に従い、5人専門家の設計会議を実行する
+4. 設計決定事項を出力する
+5. **設計会議記録を保存する** — `docs/design/logs/YYYY-MM-DD_HHmmss_<feature>.md`
+6. 起票すべきADRをリストアップする
+
+### 引数（オプション）
+- `/design <機能名>` — 特定機能の設計会議
+
+### 出力後のアクション
+1. `docs/api/openapi.yaml` を更新する
+2. `docs/db/schema.sql` を更新する
+3. 必要なADRを起票する（`docs/adr/XXX-<title>.md`）
+4. 設計レビューを実施する（`/review --design`）
+
+---
+
+## `/implement`
+
+**実装計画会議を開催し、TDD実装順序と方針を決定する。**
+
+### 手順
+1. `docs/review/persona.md` を読み、ドメインペルソナを確認する
+2. `docs/api/openapi.yaml` と `docs/db/schema.sql` の設計を確認する
+3. `.cursor/skills/implementation-board/SKILL.md` に従い、5人専門家の実装計画会議を実行する
+4. 実装計画（順序、TDD、コーディング規約）を出力する
+5. **実装計画記録を保存する** — `docs/implementation/logs/YYYY-MM-DD_HHmmss_<feature>.md`
+
+### 引数（オプション）
+- `/implement <機能名>` — 特定機能の実装計画
+
+### 出力後のアクション
+1. TDDサイクルで実装を開始する
+2. 各コンポーネント完成時に `/review` を実施する
+3. 全体完成後に `/review` で統合レビューを実施する
+
+---
+
+## `/review`
+
+**レビューボード会議を開催する。**
+
+### 手順
+1. `docs/review/persona.md` を読み、ドメインペルソナを確認する
+2. レビュー対象を取得する（優先順位に従う）
+   - PRが存在する → `gh pr diff` + `gh pr view --comments`
+   - ステージ済み変更 → `git diff --cached`
+   - 直近コミット差分 → `git diff HEAD~1`
+   - 上記すべてなし → ユーザーに対象を確認
+3. `.cursor/skills/review-board/SKILL.md` に従い、5人専門家のレビュー会議を実行する
+4. 判定結果（APPROVE / REQUEST_CHANGES / NEEDS_DISCUSSION）を出力する
+5. `MUST FIX` がある場合、修正対象ファイルと行番号を具体的に示す
+6. **レビューログを記録する** — `docs/review/logs/YYYY-MM-DD_HHmmss_<context>.md` にログを保存
+
+### 引数（オプション）
+- `/review <ファイルパス>` — 特定ファイルのみレビュー
+- `/review --pr` — 現在のPRの差分をレビュー
+- `/review --staged` — ステージ済み変更のみレビュー
+- `/review --commit <hash>` — 特定コミットの差分をレビュー
+
+---
+
+## `/fix`
+
+**直前のレビューで指摘された `MUST FIX` と `SHOULD FIX` を修正する。**
+
+### 手順
+1. 直前のレビュー結果から `MUST FIX` 項目をすべて抽出する
+2. `SHOULD FIX` 項目も抽出する
+3. 以下の順序で修正する
+   a. 設計書（docs/）の修正が必要か判断する。必要なら設計書を先に修正する
+   b. コードを修正する
+   c. 関連するテストを修正・追加する
+   d. リンター・型チェックを通す
+4. 修正内容のサマリーを出力する
+5. **修正記録をログに追記する** — 対応するレビューログファイルに修正内容を追記
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  FIX REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+修正済み:
+  [MUST FIX #1] ✅ （修正内容の要約）
+  [MUST FIX #2] ✅ （修正内容の要約）
+  [SHOULD FIX #1] ✅ （修正内容の要約）
+
+未対応（理由付き）:
+  [SHOULD FIX #2] ⏭️ （対応しない理由）
+
+次のステップ: `/re-review` で修正結果を検証してください
+```
+
+---
+
+## `/re-review`
+
+**修正後のコードに対して再レビューを実施する。**
+
+### 手順
+1. 直前の `/review` での指摘事項を読み込む
+2. 修正された差分のみを取得する（`git diff` または `git diff --cached`）
+3. 指摘事項が正しく解決されたか、1件ずつ検証する
+4. 新たな問題が発生していないか確認する
+5. 最終判定を出力する
+6. **再レビュー結果をログに追記する** — 対応するレビューログファイルに再レビュー結果を追記
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RE-REVIEW RESULT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+前回の指摘:
+  [MUST FIX #1] ✅ 解決済み
+  [MUST FIX #2] ✅ 解決済み
+  [SHOULD FIX #1] ✅ 解決済み
+
+新規指摘: なし / あり（詳細）
+
+最終判定: APPROVE ✅ / REQUEST_CHANGES 🔄
+推奨: `/push` でコミット＆プッシュしてください
+```
+
+### ループ制御
+- `MUST FIX` が残っている → 「`/fix` で修正してください」と案内する
+- 3回ループしても解決しない → 根本原因の分析を提示し、ユーザーに判断を仰ぐ
+
+---
+
+## `/push`
+
+**レビュー済みの変更をコミットしてプッシュする。**
+
+### 前提条件の確認
+1. 直前の `/review` または `/re-review` で `APPROVE` が出ていることを確認する
+2. `APPROVE` が出ていない場合、警告を表示し確認を求める
+
+### 手順
+1. 変更内容を分析し、Conventional Commits形式のコミットメッセージを生成する
+2. コミットメッセージをユーザーに提示し、確認を得る
+3. `git add` → `git commit` → `git push` を実行する
+4. PRが存在する場合、PR情報を表示する
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PUSH COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+コミット: feat(auth): implement JWT token validation
+ブランチ: feature/auth-jwt → origin/feature/auth-jwt
+PR: https://github.com/...（該当する場合）
+```
+
+---
+
+## `/comment`
+
+**PRにレビューコメントを投稿する。**
+
+### 手順
+1. 現在のブランチに紐づくPRを特定する
+   ```bash
+   gh pr view --json number,url
+   ```
+2. PRが存在しない場合 → PR作成を提案する
+3. レビュー結果がある場合 → レビュー内容をPRコメントとして整形する
+4. コメントを投稿する
+   ```bash
+   gh pr comment <number> --body "..."
+   ```
+
+### 引数
+- `/comment` — 直前のレビュー結果をPRコメントとして投稿
+- `/comment <メッセージ>` — 任意のコメントをPRに投稿
+- `/comment --review` — GitHub Review（Approve/Request Changes）として投稿
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  COMMENT POSTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PR: #42 — feat: implement user authentication
+URL: https://github.com/.../pull/42
+コメント: レビューボード結果を投稿しました
+```
