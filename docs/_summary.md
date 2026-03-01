@@ -16,7 +16,7 @@
 |-------|------|------|
 | 1 | Backend SDK基盤 (JWT, JWKS, RLS) | ✅ 完了 |
 | 2a | Rate Limiting, MFA, SMTP | ✅ 完了 |
-| 2b | Frontend SDK (React Hooks) | ⏳ 未着手 |
+| 2b | Frontend SDK (React Hooks) | ✅ 完了 |
 | 3 | Redis対応, 高度な機能 | 📋 計画のみ |
 
 ## 主要ADR
@@ -72,13 +72,25 @@ RATE_LIMIT_LOGIN_REQUESTS=5
 - カバレッジ: 78%
 - 主要コンポーネント: 85%以上
 
+## Frontend SDK構成
+
+```
+packages/frontend-sdk/src/
+├── index.ts           # エクスポート
+├── types.ts           # 型定義
+├── AuthContext.ts     # React Context
+├── AuthProvider.tsx   # Provider + UserManager
+├── useAuth.ts         # Main Hook
+├── AuthGuard.tsx      # Route Guard
+└── *.test.tsx         # テスト (8件)
+```
+
 ## 次のタスク
 
-Phase 2b: Frontend SDK
-1. `packages/frontend-sdk/` 作成
-2. AuthProvider, useAuth, AuthGuard実装
-3. Example React App
-4. 単体テスト (Jest + RTL)
+Phase 3: 拡張機能
+1. Redis対応RateLimitStore
+2. カスタムメールテンプレート
+3. ユーザーID単位Rate Limiting
 
 ---
 
