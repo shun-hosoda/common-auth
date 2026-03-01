@@ -20,6 +20,7 @@ export interface AuthContextValue {
   register: () => void;
   resetPassword: () => void;
   configureMFA: () => void;
+  handleCallback: () => Promise<void>;
 
   getAccessToken: () => string | null;
 }

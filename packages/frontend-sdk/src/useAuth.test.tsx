@@ -13,6 +13,7 @@ const mockContextValue: AuthContextValue = {
   register: jest.fn(),
   resetPassword: jest.fn(),
   configureMFA: jest.fn(),
+  handleCallback: jest.fn(),
   getAccessToken: jest.fn(),
 };
 

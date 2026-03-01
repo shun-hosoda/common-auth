@@ -110,6 +110,17 @@ export function AuthProvider({
     return user?.access_token || null;
   }, [user]);
 
+  const handleCallback = useCallback(async () => {
+    try {
+      setError(null);
+      const callbackUser = await userManager.signinRedirectCallback();
+      setUser(callbackUser);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Callback processing failed"));
+      throw err;
+    }
+  }, [userManager]);
+
   const contextValue = useMemo(
     () => ({
       user,
@@ -121,9 +132,10 @@ export function AuthProvider({
       register,
       resetPassword,
       configureMFA,
+      handleCallback,
       getAccessToken,
     }),
-    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, getAccessToken]
+    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, handleCallback, getAccessToken]
   );
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

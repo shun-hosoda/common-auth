@@ -72,6 +72,7 @@ function Dashboard() {
     register,          // () => void - redirect to Keycloak registration
     resetPassword,     // () => void - redirect to password reset
     configureMFA,      // () => void - redirect to MFA setup
+    handleCallback,    // () => Promise<void> - process OIDC callback
     getAccessToken,    // () => string | null
   } = useAuth();
 
@@ -113,24 +114,22 @@ Create a callback page to handle OIDC redirects:
 ```tsx
 // pages/callback.tsx
 import { useEffect } from 'react';
-import { UserManager } from 'oidc-client-ts';
+import { useAuth } from '@common-auth/react';
 
 export default function Callback() {
+  const { handleCallback } = useAuth();
+
   useEffect(() => {
-    const userManager = new UserManager({ 
-      authority: process.env.NEXT_PUBLIC_AUTHORITY,
-      client_id: process.env.NEXT_PUBLIC_CLIENT_ID,
-      redirect_uri: window.location.origin + '/callback',
-    });
-    
-    userManager.signinRedirectCallback()
+    handleCallback()
       .then(() => window.location.href = '/dashboard')
       .catch(console.error);
-  }, []);
+  }, [handleCallback]);
 
   return <div>Processing login...</div>;
 }
 ```
+
+**Important**: Always use `useAuth().handleCallback()` instead of creating a separate `UserManager` instance. This ensures consistent token management across the application.
 
 ## Requirements
 
