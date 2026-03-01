@@ -1,23 +1,23 @@
-# Common Auth - React Example
+# Common Auth - React サンプルアプリ
 
-React application demonstrating @common-auth/react SDK with Keycloak.
+@common-auth/react SDKとKeycloakの統合を実演するReactアプリケーション。
 
-## Features
+## 機能
 
-- Login with OIDC Authorization Code + PKCE
-- Two-Factor Authentication (TOTP)
-- Password Reset (email notification)
-- User Self-Registration
-- Dashboard with user profile and token info
+- OIDC Authorization Code + PKCEによるログイン
+- 二要素認証（TOTP）
+- パスワードリセット（メール通知）
+- ユーザー自己登録
+- ユーザープロフィールとトークン情報を表示するダッシュボード
 
-## Prerequisites
+## 前提条件
 
-1. Auth Stack running (Keycloak + PostgreSQL)
-2. Frontend client registered in Keycloak
+1. Auth Stackが起動していること（Keycloak + PostgreSQL）
+2. Keycloakに`frontend-app`クライアントが登録されていること
 
-## Quick Start
+## クイックスタート
 
-### 1. Start Auth Stack
+### 1. Auth Stackの起動
 
 ```bash
 cd ../../auth-stack
@@ -25,94 +25,106 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-Wait for Keycloak to start (~1-2 minutes):
+Keycloakの起動を待ちます（1-2分）：
 ```bash
 curl http://localhost:8080/health/ready
 ```
 
-### 2. Register Frontend Client in Keycloak
+### 2. Keycloakにクライアントが登録されていることを確認
 
-1. Open http://localhost:8080
-2. Login with `admin` / `admin`
-3. Select "common-auth" realm
-4. Go to **Clients** → **Create client**
-5. Configure:
+`example-app` クライアントは `auth-stack` 起動時に自動的にインポートされます。
 
-| Setting | Value |
-|---------|-------|
-| Client ID | `frontend-app` |
-| Client authentication | OFF |
-| Valid redirect URIs | `http://localhost:3000/*` |
-| Valid post logout redirect URIs | `http://localhost:3000/*` |
-| Web origins | `http://localhost:3000` |
+確認方法：
+1. http://localhost:8080 を開く
+2. `admin` / `admin` でログイン
+3. "common-auth" Realmを選択
+4. **Clients** を開いて `example-app` が存在することを確認
 
-### 3. Install & Run
+もし存在しない場合は、Auth Stackを再起動してRealmを再インポート：
+```bash
+cd ../../auth-stack
+docker-compose down -v
+docker-compose up -d
+```
+
+### 3. インストール & 実行
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000
+http://localhost:3000 を開く
 
-## Login Flow
+## ログインフロー
 
-1. Click **Login** → Redirects to Keycloak login page
-2. Enter credentials: `testuser@example.com` / `password123`
-3. (Optional) Enter TOTP code if MFA is enabled
-4. Redirects back to `/callback` → `/dashboard`
+1. **Login** をクリック → Keycloakログイン画面にリダイレクト
+2. 認証情報を入力: `testuser@example.com` / `password123`
+3. （任意）MFA有効時はTOTPコードを入力
+4. `/callback` → `/dashboard` にリダイレクトされる
 
-## Password Reset Flow
+## パスワードリセットフロー
 
-1. Click **Forgot password?** → Redirects to Keycloak reset page
-2. Enter email address
-3. Check email for reset link (requires SMTP configured)
-4. Click link → Set new password
-5. Login with new password
+1. **Forgot password?** をクリック → Keycloakリセット画面にリダイレクト
+2. メールアドレスを入力
+3. リセットリンクをメールで確認（SMTP設定が必要）
+4. リンクをクリック → 新しいパスワードを設定
+5. 新しいパスワードでログイン
 
-## MFA Setup Flow
+## MFA設定フロー
 
-1. Login to dashboard
-2. Click **Setup MFA** → Redirects to Keycloak account console
-3. Scan QR code with authenticator app (Google Authenticator, Authy, etc.)
-4. Enter verification code
-5. MFA is now required on next login
+1. ダッシュボードにログイン
+2. **Setup MFA** をクリック → Keycloakアカウントコンソールにリダイレクト
+3. 認証アプリ（Google Authenticator、Authyなど）でQRコードをスキャン
+4. 認証コードを入力
+5. 次回ログインからMFAが要求される
 
-## User Registration Flow
+## ユーザー登録フロー
 
-1. Click **Register** → Redirects to Keycloak registration page
-2. Fill in email, password, name
-3. (If email verification enabled) Check email for verification link
-4. Login with new account
+1. **Register** をクリック → Keycloak登録画面にリダイレクト
+2. メール、パスワード、名前を入力
+3. （メール認証有効時）メールで認証リンクを確認
+4. 新しいアカウントでログイン
 
-## Configuration
+## 設定
 
-Edit `src/main.tsx` to change Keycloak settings:
+`src/main.tsx` を編集してKeycloak設定を変更：
 
 ```typescript
 const AUTH_CONFIG = {
   authority: 'http://localhost:8080/realms/common-auth',
-  clientId: 'frontend-app',
+  clientId: 'example-app',
   redirectUri: 'http://localhost:3000/callback',
   postLogoutRedirectUri: 'http://localhost:3000',
 }
 ```
 
-## Troubleshooting
+## トラブルシューティング
 
-### "Invalid redirect_uri" error
+### "Invalid redirect_uri" エラー
 
-Ensure the redirect URI in Keycloak client settings matches exactly:
-- `http://localhost:3000/*` (with wildcard)
+Keycloakクライアント設定でリダイレクトURIが一致していることを確認：
+- `http://localhost:3000/*` （ワイルドカード付き）
 
-### CORS errors
+### CORSエラー
 
-Check Web Origins in Keycloak client settings:
+KeycloakクライアントのWeb Origins設定を確認：
 - `http://localhost:3000`
 
-### Password reset email not received
+### 400エラー（クライアントが見つからない）
 
-Configure SMTP in `auth-stack/.env`:
+Auth Stackを再起動してRealmを再インポートしてください：
+```bash
+cd ../../auth-stack
+docker-compose down -v
+docker-compose up -d
+```
+
+数分待ってから、http://localhost:8080 で `example-app` クライアントが存在することを確認してください。
+
+### パスワードリセットメールが届かない
+
+`auth-stack/.env` でSMTPを設定：
 ```bash
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -120,7 +132,7 @@ SMTP_USER=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
 ```
 
-Then restart Auth Stack:
+その後Auth Stackを再起動：
 ```bash
 docker-compose down && docker-compose up -d
 ```

@@ -1,14 +1,14 @@
 # @common-auth/react
 
-React Hooks SDK for common-auth authentication platform.
+common-auth認証プラットフォーム用のReact Hooks SDK
 
-## Installation
+## インストール
 
 ```bash
 npm install @common-auth/react
 ```
 
-## Quick Start
+## クイックスタート
 
 ```tsx
 import { AuthProvider, useAuth, AuthGuard } from '@common-auth/react';
@@ -41,16 +41,16 @@ function App() {
 
 ### AuthProvider
 
-Wrap your app with `AuthProvider` to enable authentication.
+アプリを `AuthProvider` でラップして認証を有効化します。
 
 ```tsx
 <AuthProvider
   authority="http://localhost:8080/realms/common-auth"
   clientId="frontend-app"
   redirectUri="http://localhost:3000/callback"
-  postLogoutRedirectUri="http://localhost:3000"  // optional
-  scope="openid profile email"                   // optional
-  automaticSilentRenew={true}                    // optional
+  postLogoutRedirectUri="http://localhost:3000"  // オプション
+  scope="openid profile email"                   // オプション
+  automaticSilentRenew={true}                    // オプション
 >
   {children}
 </AuthProvider>
@@ -58,29 +58,29 @@ Wrap your app with `AuthProvider` to enable authentication.
 
 ### useAuth
 
-Access authentication state and methods.
+認証状態とメソッドにアクセスします。
 
 ```tsx
 function Dashboard() {
   const {
-    user,              // OIDC User object
+    user,              // OIDCユーザーオブジェクト
     isAuthenticated,   // boolean
     isLoading,         // boolean
     error,             // Error | null
     login,             // () => Promise<void>
     logout,            // () => Promise<void>
-    register,          // () => void - redirect to Keycloak registration
-    resetPassword,     // () => void - redirect to password reset
-    configureMFA,      // () => void - redirect to MFA setup
-    handleCallback,    // () => Promise<void> - process OIDC callback
+    register,          // () => void - Keycloak登録画面へリダイレクト
+    resetPassword,     // () => void - パスワードリセット画面へリダイレクト
+    configureMFA,      // () => void - MFA設定画面へリダイレクト
+    handleCallback,    // () => Promise<void> - OIDCコールバック処理
     getAccessToken,    // () => string | null
   } = useAuth();
 
   return (
     <div>
-      <p>Welcome, {user?.profile.email}</p>
-      <button onClick={logout}>Logout</button>
-      <button onClick={configureMFA}>Setup MFA</button>
+      <p>ようこそ、{user?.profile.email}</p>
+      <button onClick={logout}>ログアウト</button>
+      <button onClick={configureMFA}>MFA設定</button>
     </div>
   );
 }
@@ -88,28 +88,28 @@ function Dashboard() {
 
 ### AuthGuard
 
-Protect routes from unauthenticated access.
+未認証ユーザーからルートを保護します。
 
 ```tsx
-// Default: redirects to login
+// デフォルト: ログインにリダイレクト
 <AuthGuard>
   <ProtectedContent />
 </AuthGuard>
 
-// Custom loading state
+// カスタムローディング状態
 <AuthGuard fallback={<Spinner />}>
   <ProtectedContent />
 </AuthGuard>
 
-// Custom redirect handler (e.g., for Next.js)
+// カスタムリダイレクトハンドラー（例: Next.js）
 <AuthGuard onUnauthenticated={() => router.push('/login')}>
   <ProtectedContent />
 </AuthGuard>
 ```
 
-## Handling Callbacks
+## コールバックの処理
 
-Create a callback page to handle OIDC redirects:
+OIDCリダイレクトを処理するコールバックページを作成：
 
 ```tsx
 // pages/callback.tsx
@@ -125,17 +125,17 @@ export default function Callback() {
       .catch(console.error);
   }, [handleCallback]);
 
-  return <div>Processing login...</div>;
+  return <div>ログイン処理中...</div>;
 }
 ```
 
-**Important**: Always use `useAuth().handleCallback()` instead of creating a separate `UserManager` instance. This ensures consistent token management across the application.
+**重要**: 常に `useAuth().handleCallback()` を使用してください。別の `UserManager` インスタンスを作成しないでください。これによりアプリケーション全体で一貫したトークン管理が保証されます。
 
-## Requirements
+## 要件
 
 - React 18+
-- Keycloak or any OIDC-compliant IdP
+- KeycloakまたはOIDC準拠のIdP
 
-## License
+## ライセンス
 
 MIT

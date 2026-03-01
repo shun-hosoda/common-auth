@@ -1,58 +1,83 @@
 # Auth Stack
 
-Keycloak + PostgreSQL Docker Compose setup for common-auth development and testing.
+Keycloak + PostgreSQL Docker Compose構成。common-authの開発・テスト用環境。
 
-## Quick Start
+## クイックスタート
 
-### 1. Copy Environment Variables
+### 1. 環境変数のコピー
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` if you need to change default ports or credentials.
+必要に応じて `.env` のポートや認証情報を編集してください。
 
-### 2. Start Services
+### 2. サービス起動
 
 ```bash
 docker-compose up -d
 ```
 
-### 3. Access Keycloak Admin Console
+### 3. 初期セットアップ
+
+Auth Stackを起動すると、`common-auth` Realmが自動的にインポートされます。
+
+**注意**: 初回起動時またはRealmを再インポートする場合は、コンテナとボリュームを削除してください：
+
+```bash
+docker-compose down -v
+docker-compose up -d
+```
+
+### 4. Keycloak管理コンソールへアクセス
 
 - URL: http://localhost:8080
-- Username: `admin`
-- Password: `admin`
+- ユーザー名: `admin`
+- パスワード: `admin`
 
-### 4. Verify Realm Import
+### 5. Realmインポートの確認
 
-The `common-auth` realm should be automatically imported with:
-- Client: `backend-app`
-- Test Users:
-  - `testuser@example.com` / `password123` (user role)
-  - `admin@example.com` / `admin123` (admin role)
+`common-auth` Realmが自動的にインポートされ、以下が含まれています：
 
-## Services
+**クライアント:**
+- `backend-app`: Backend SDK用（Confidential Client）
+  - FastAPI、Django、Expressなどのサーバーサイドアプリケーション用
+  - クライアントシークレットを使用してKeycloakと認証
+  - JWT検証、Admin API操作に使用
+- `example-app`: Frontend Example用（Public Client）
+  - React、Vue、Angularなどのブラウザアプリケーション用
+  - PKCE使用、シークレット不要
+  - ブラウザで直接Keycloakと通信
 
-| Service | Port | Description |
+**テストユーザー:**
+- `testuser@example.com` / `password123` (user role)
+- `admin@example.com` / `admin123` (admin role)
+
+**クライアントの使い分け:**
+- **フロントエンドアプリ**: `example-app`を使用（React App）
+- **バックエンドアプリ**: `backend-app`を使用（FastAPI App）
+
+## サービス一覧
+
+| サービス | ポート | 説明 |
 |---|---|---|
 | Keycloak | 8080 | Identity Provider |
-| Keycloak DB | (internal) | PostgreSQL for Keycloak |
-| App DB | 5433 | PostgreSQL for application (test/dev) |
+| Keycloak DB | (内部) | Keycloak用PostgreSQL |
+| App DB | 5433 | アプリケーション用PostgreSQL (test/dev) |
 
-## Application Database
+## アプリケーションデータベース
 
-The `app-db` service provides a PostgreSQL instance for testing with:
-- Pre-created tables: `tenants`, `user_profiles`
-- Row-Level Security enabled
-- Sample tenant: `common-auth`
+`app-db` サービスは、テスト用のPostgreSQLインスタンスを提供します：
+- 事前作成テーブル: `tenants`, `user_profiles`
+- Row-Level Security有効化
+- サンプルテナント: `common-auth`
 
-Connect:
+接続方法:
 ```bash
 psql -h localhost -p 5433 -U app_user -d app_db
 ```
 
-## Health Checks
+## ヘルスチェック
 
 ```bash
 # Keycloak
@@ -62,90 +87,103 @@ curl http://localhost:8080/health/ready
 docker-compose exec app-db pg_isready -U app_user
 ```
 
-## Stop Services
+## サービス停止
 
 ```bash
 docker-compose down
 
-# Remove volumes (reset databases)
+# ボリューム削除（データベースリセット）
 docker-compose down -v
 ```
 
-## Troubleshooting
+## トラブルシューティング
 
-### Keycloak takes long to start
+### Keycloakの起動に時間がかかる
 
-First startup may take 1-2 minutes. Check logs:
+初回起動は1-2分かかります。ログを確認：
 ```bash
 docker-compose logs -f keycloak
 ```
 
-### Realm not imported
+### Realmがインポートされない
 
-Verify `keycloak/realm-export.json` exists and check logs:
+`keycloak/realm-export.json` の存在を確認し、ログをチェック：
 ```bash
 docker-compose logs keycloak | grep -i import
 ```
 
-### Port conflicts
+### ポート競合
 
-Edit `.env` to change port numbers:
+`.env` でポート番号を変更：
 ```bash
 KEYCLOAK_PORT=9080
 APP_DB_PORT=5434
 ```
 
-## Phase 2 Features
+### frontend-appクライアントが見つからない
 
-### SMTP / Email
+Realmが正しくインポートされているか確認してください。
+再インポートが必要な場合：
 
-SMTP is required for password reset and email verification.
-Set the `SMTP_*` variables in `.env` to enable.
+```bash
+docker-compose down -v
+docker-compose up -d
+```
 
-Without SMTP configured, Keycloak will still start but email-dependent
-features (password reset, email verification) will fail.
+数分待ってKeycloakが完全に起動したら、http://localhost:8080 で `example-app` クライアントが存在することを確認してください。
+
+## Phase 2機能
+
+### SMTP / メール
+
+パスワードリセットやメール認証にはSMTP設定が必要です。
+`.env` で `SMTP_*` 変数を設定してください。
+
+SMTP未設定の場合でもKeycloakは起動しますが、メール依存機能
+（パスワードリセット、メール認証）は失敗します。
 
 ### MFA (TOTP)
 
-MFA is pre-configured via `realm-export.json` with TOTP (6 digits, 30s period).
-Users can optionally enrol via their Keycloak Account Console at
-`http://localhost:8080/realms/common-auth/account/`.
+MFAは `realm-export.json` でTOTP（6桁、30秒）として事前設定されています。
+ユーザーはKeycloakアカウントコンソール（`http://localhost:8080/realms/common-auth/account/`）
+から任意でMFAを登録できます。
 
-To **require** MFA for all users, set `CONFIGURE_TOTP` as a
-default required action in the Keycloak admin console.
+全ユーザーにMFAを**必須化**するには、Keycloak管理コンソールで
+`CONFIGURE_TOTP` をデフォルトの必須アクションとして設定してください。
 
-### User Self-Registration
+### ユーザー自己登録
 
-Self-registration is enabled by default (`registrationAllowed: true`).
-Users register at the Keycloak login page.
+自己登録はデフォルトで有効化されています（`registrationAllowed: true`）。
+ユーザーはKeycloakログインページから登録できます。
 
-### Rate Limiting
+### レート制限
 
-Rate limiting is applied by the Backend SDK middleware, not Keycloak.
-Configure limits in `.env`:
+レート制限はBackend SDKミドルウェアで適用され、Keycloakではありません。
+`.env` で制限を設定：
 
 ```bash
 RATE_LIMIT_ENABLED=true
-RATE_LIMIT_DEFAULT_REQUESTS=60    # per minute
-RATE_LIMIT_LOGIN_REQUESTS=5       # per minute
+RATE_LIMIT_DEFAULT_REQUESTS=60    # 1分あたり
+RATE_LIMIT_LOGIN_REQUESTS=5       # 1分あたり
 ```
 
-## Development Workflow
+## 開発ワークフロー
 
-1. Start Auth Stack: `docker-compose up -d`
-2. Develop Backend SDK with hot reload
-3. Test against running Keycloak
-4. Stop: `docker-compose down`
+1. Auth Stack起動: `docker-compose up -d`
+2. Keycloakの起動完了を待つ（1-2分）
+3. Backend SDKでホットリロード開発
+4. 起動中のKeycloakでテスト
+5. 停止: `docker-compose down`
 
-## Production Deployment
+## 本番デプロイ
 
-This Docker Compose setup is for **development/testing only**.
+このDocker Compose構成は**開発/テスト専用**です。
 
-For production:
-- Use managed Keycloak (e.g., Keycloak Operator on Kubernetes)
-- Use managed PostgreSQL (e.g., AWS RDS, Google Cloud SQL)
-- Configure proper secrets management
-- Enable HTTPS with valid certificates
-- Review and harden security settings
+本番環境では：
+- マネージドKeycloak（Kubernetes上のKeycloak Operatorなど）を使用
+- マネージドPostgreSQL（AWS RDS、Google Cloud SQLなど）を使用
+- 適切なシークレット管理を設定
+- 有効な証明書でHTTPSを有効化
+- セキュリティ設定を確認・強化
 
-See `docs/` for production deployment guidelines.
+本番デプロイガイドラインについては `docs/` を参照してください。

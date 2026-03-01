@@ -1,179 +1,179 @@
-# Common Auth Example Application
+# Common Auth Example Application - FastAPI
 
-Example FastAPI application demonstrating common-auth SDK usage.
+common-auth SDKの使用例を示すFastAPIアプリケーション。
 
-## Prerequisites
+## 前提条件
 
-1. **Start Auth Stack** (Keycloak):
+1. **Auth Stack（Keycloak）の起動**:
    ```bash
    cd ../../auth-stack
    cp .env.example .env
    docker-compose up -d
    ```
 
-2. **Wait for Keycloak** to be ready (~1-2 minutes):
+2. **Keycloakの起動完了を待つ**（1-2分）:
    ```bash
-   curl http://localhost:8080/health/ready
+   curl http://localhost:8080
    ```
 
-## Setup
+## セットアップ
 
-### 1. Create Virtual Environment
+### 1. 仮想環境の作成
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 ```
 
-### 2. Install Dependencies
+### 2. 依存関係のインストール
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment
+### 3. 環境変数の設定
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` if needed (defaults should work with local Auth Stack).
+必要に応じて `.env` を編集してください（デフォルトでローカルAuth Stackで動作します）。
 
-## Run
+**重要**: このFastAPI Appは`backend-app`（Confidential Client）を使用します。
+- **フロントエンドアプリ**（React App）は`example-app`（Public Client）を使用
+- **バックエンドアプリ**（FastAPI App）は`backend-app`（Confidential Client）を使用
+
+## 実行
 
 ```bash
 python main.py
 ```
 
-Or with uvicorn:
+またはuvicornで：
 ```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at:
-- API: http://localhost:8000
-- Docs: http://localhost:8000/docs
-- Health: http://localhost:8000/auth/health
+アプリケーションは http://localhost:8000 で起動します。
 
-## Test Endpoints
+## API エンドポイント
 
-### 1. Public Endpoint (No Auth)
+### 公開エンドポイント
 
+- `GET /`: ヘルスチェック
+- `GET /docs`: Swagger UI（APIドキュメント）
+
+### 保護されたエンドポイント（JWT必須）
+
+- `GET /api/me`: 現在のユーザー情報を取得
+- `GET /api/protected`: 保護されたエンドポイント（認証必須）
+- `GET /api/admin`: 管理者専用エンドポイント（admin role必須）
+
+## 認証テスト
+
+### 1. アクセストークンの取得
+
+**方法1**: React Appでログイン後、トークンをコピー
+- http://localhost:3000 にアクセス
+- ログイン: `testuser@example.com` / `password123`
+- ダッシュボードでトークンをコピー
+
+**方法2**: curlで直接取得（Direct Access Grants）
 ```bash
-curl http://localhost:8000/
-curl http://localhost:8000/api/public
-```
-
-### 2. Get Token from Keycloak
-
-Using test user from realm-export.json:
-
-```bash
-# Get access token
-TOKEN=$(curl -X POST "http://localhost:8080/realms/common-auth/protocol/openid-connect/token" \
+curl -X POST http://localhost:8080/realms/common-auth/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=password" \
   -d "client_id=backend-app" \
   -d "username=testuser@example.com" \
-  -d "password=password123" \
-  | jq -r '.access_token')
-
-echo $TOKEN
+  -d "password=password123"
 ```
 
-### 3. Access Protected Endpoints
+### 2. APIを呼び出す
 
 ```bash
-# Get user info
-curl http://localhost:8000/auth/me \
+# トークンを環境変数に設定
+export TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# ユーザー情報を取得
+curl http://localhost:8000/api/me \
   -H "Authorization: Bearer $TOKEN"
 
-# Access protected endpoint
+# 保護されたエンドポイントにアクセス
 curl http://localhost:8000/api/protected \
   -H "Authorization: Bearer $TOKEN"
-
-# Try admin endpoint (should fail with testuser)
-curl http://localhost:8000/api/admin \
-  -H "Authorization: Bearer $TOKEN"
 ```
 
-### 4. Test Admin Access
+## マルチテナント対応（オプション）
 
-Get token for admin user:
+### データベース接続
+
+`DATABASE_URL`を設定してマルチテナント機能を有効化：
 
 ```bash
-ADMIN_TOKEN=$(curl -X POST "http://localhost:8080/realms/common-auth/protocol/openid-connect/token" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password" \
-  -d "client_id=backend-app" \
-  -d "username=admin@example.com" \
-  -d "password=admin123" \
-  | jq -r '.access_token')
-
-# Access admin endpoint
-curl http://localhost:8000/api/admin \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+# .env
+DATABASE_URL=postgresql+asyncpg://app_user:app_pass@localhost:5433/app_db
 ```
 
-## Available Endpoints
+### テナント分離
 
-| Endpoint | Auth | Description |
-|---|---|---|
-| `GET /` | No | Root endpoint |
-| `GET /api/public` | Optional | Public endpoint (shows user if authenticated) |
-| `GET /api/protected` | Yes | Protected endpoint |
-| `GET /api/admin` | Yes + Admin role | Admin-only endpoint |
-| `GET /auth/me` | Yes | Get current user info |
-| `GET /auth/health` | No | Auth service health check |
-| `POST /auth/logout` | Yes | Logout |
+Row-Level Security（RLS）により、各テナントのデータが自動的に分離されます：
 
-## Test Users
+```python
+from common_auth import get_db_session, AuthUser
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
-From `auth-stack/keycloak/realm-export.json`:
+@app.get("/api/users")
+async def get_users(
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    # user.tenant_id が自動的にセットされ、RLS が適用される
+    users = db.query(UserProfile).all()  # 自分のテナントのデータのみ
+    return users
+```
 
-| Email | Password | Roles |
-|---|---|---|
-| testuser@example.com | password123 | user |
-| admin@example.com | admin123 | user, admin |
+## レート制限
 
-## Troubleshooting
+Phase 2機能: リクエストレート制限がミドルウェアレベルで適用されます。
 
-### "Failed to fetch JWKS"
+```bash
+# .env
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_DEFAULT_REQUESTS=60    # 1分あたり
+RATE_LIMIT_LOGIN_REQUESTS=5       # 1分あたり（ログインエンドポイント）
+```
 
-- Ensure Keycloak is running: `docker ps`
-- Check Keycloak is healthy: `curl http://localhost:8080/health/ready`
-- Verify KEYCLOAK_URL in `.env`
+## トラブルシューティング
 
-### "Invalid token"
+### "Unable to get JWKS" エラー
 
-- Token may have expired (5 minute lifetime)
-- Verify KEYCLOAK_REALM matches in `.env` and token request
-- Check token signature with jwt.io
+Keycloakが起動していることを確認：
+```bash
+curl http://localhost:8080
+```
 
-### "Authentication service error"
+### "Invalid token" エラー
 
-- Check environment variables are set correctly
-- Review application logs for details
+1. トークンの有効期限を確認（デフォルト: 5分）
+2. `KEYCLOAK_URL`と`KEYCLOAK_REALM`が正しいか確認
+3. トークンが正しいRealmから発行されているか確認
 
-## Development
+### データベース接続エラー
 
-### Hot Reload
+Auth Stackの`app-db`が起動していることを確認：
+```bash
+docker ps | grep app-db
+```
 
-The app runs with `reload=True`, so code changes trigger automatic restart.
+## プロダクション対応
 
-### Logging
+このExample Appは**開発/テスト用**です。本番環境では：
 
-Logs show:
-- Authentication events (user login)
-- Token verification
-- JWKS fetches
-- Errors
+1. **環境変数の管理**: AWS Secrets Manager、HashiCorp Vaultなどを使用
+2. **HTTPS**: リバースプロキシ（Nginx、Traefik）でHTTPSを終端
+3. **レート制限**: Redisバックエンドでスケール可能なレート制限を実装
+4. **ロギング**: 構造化ログ（JSON）とログ集約（ELK、Datadog）
+5. **モニタリング**: Prometheus、Grafanaでメトリクス収集
 
-## Next Steps
-
-- Add database integration (SQLAlchemy)
-- Implement Lazy Sync to `user_profiles`
-- Add RLS enforcement with `set_tenant_context()`
-- Create integration tests
-
-See `../../packages/backend-sdk/README.md` for more SDK documentation.
+詳細は `docs/` のプロダクションデプロイガイドを参照してください。

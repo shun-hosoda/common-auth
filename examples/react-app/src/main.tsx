@@ -7,7 +7,7 @@ import './index.css'
 
 const AUTH_CONFIG = {
   authority: 'http://localhost:8080/realms/common-auth',
-  clientId: 'frontend-app',
+  clientId: 'example-app',
   redirectUri: 'http://localhost:3000/callback',
   postLogoutRedirectUri: 'http://localhost:3000',
 }

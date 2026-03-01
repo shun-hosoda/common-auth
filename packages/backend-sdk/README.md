@@ -1,25 +1,25 @@
 # common-auth Backend SDK
 
-Portable authentication SDK based on Keycloak and OIDC for FastAPI applications.
+KeycloakとOIDCベースのポータブル認証SDK（FastAPIアプリケーション向け）
 
-## Features
+## 機能
 
-- **OIDC Authorization Code Flow + PKCE**: OAuth 2.1 recommended flow
-- **JWT Verification**: RS256 signature verification with JWKS caching
-- **Multi-tenant Support**: Row-Level Security (RLS) with PostgreSQL
-- **Security Headers**: HSTS, CSP, X-Frame-Options, etc.
-- **Graceful Degradation**: Continues authentication with cached JWKS when Keycloak is down
-- **Developer-friendly**: Simple `setup_auth(app, config)` integration
+- **OIDC Authorization Code Flow + PKCE**: OAuth 2.1推奨フロー
+- **JWT検証**: JWKS キャッシュによるRS256署名検証
+- **マルチテナント対応**: PostgreSQLのRow-Level Security (RLS)
+- **セキュリティヘッダー**: HSTS、CSP、X-Frame-Optionsなど
+- **グレースフルデグラデーション**: Keycloakダウン時もキャッシュされたJWKSで認証継続
+- **開発者フレンドリー**: シンプルな `setup_auth(app, config)` 統合
 
-## Installation
+## インストール
 
 ```bash
 pip install common-auth
 ```
 
-## Quick Start
+## クイックスタート
 
-### 1. Set Environment Variables
+### 1. 環境変数の設定
 
 ```bash
 export KEYCLOAK_URL=https://keycloak.example.com
@@ -27,7 +27,7 @@ export KEYCLOAK_REALM=my-tenant
 export KEYCLOAK_CLIENT_ID=my-app
 ```
 
-### 2. Integrate with FastAPI
+### 2. FastAPIとの統合
 
 ```python
 from fastapi import FastAPI, Depends
@@ -35,7 +35,7 @@ from common_auth import AuthConfig, setup_auth, get_current_user, AuthUser
 
 app = FastAPI()
 
-# Setup authentication
+# 認証のセットアップ
 config = AuthConfig.from_env()
 setup_auth(app, config)
 
@@ -44,76 +44,117 @@ async def protected_endpoint(user: AuthUser = Depends(get_current_user)):
     return {"user_id": user.sub, "tenant": user.tenant_id}
 ```
 
-### 3. Run Your App
+### 3. アプリの実行
 
 ```bash
 uvicorn main:app --reload
 ```
 
-## Configuration
+## 設定
 
-### Required Environment Variables
+### 必須環境変数
 
-| Variable | Description |
+| 変数 | 説明 |
 |---|---|
-| `KEYCLOAK_URL` | Keycloak base URL |
-| `KEYCLOAK_REALM` | Realm name |
-| `KEYCLOAK_CLIENT_ID` | Client ID |
+| `KEYCLOAK_URL` | KeycloakのベースURL |
+| `KEYCLOAK_REALM` | Realm名 |
+| `KEYCLOAK_CLIENT_ID` | クライアントID |
 
-### Optional Environment Variables
+### オプション環境変数
 
-| Variable | Default | Description |
+| 変数 | デフォルト | 説明 |
 |---|---|---|
-| `TENANT_ID_SOURCE` | `iss` | How to extract tenant_id (`iss`, `custom`, `fixed`) |
-| `TENANT_ID_CLAIM` | - | Custom JWT claim name (when `TENANT_ID_SOURCE=custom`) |
-| `TENANT_ID_FIXED` | - | Fixed tenant ID (when `TENANT_ID_SOURCE=fixed`) |
-| `JWKS_CACHE_TTL` | `86400` | JWKS cache TTL in seconds (24 hours) |
-| `ENABLE_RLS` | `true` | Enable Row-Level Security session variable |
-| `ENABLE_USER_SYNC` | `false` | Enable lazy sync to user_profiles table |
+| `JWKS_CACHE_TTL` | 3600 | JWKS キャッシュのTTL（秒） |
+| `DB_URL` | None | マルチテナント用のPostgreSQL URL |
+| `TENANT_ID_CLAIM` | tenant_id | JWTのテナントIDクレーム名 |
 
-## Architecture
+### レート制限設定（Phase 2）
 
+| 変数 | デフォルト | 説明 |
+|---|---|---|
+| `RATE_LIMIT_ENABLED` | true | レート制限の有効/無効 |
+| `RATE_LIMIT_DEFAULT_REQUESTS` | 60 | デフォルトのリクエスト数制限（1分あたり） |
+| `RATE_LIMIT_LOGIN_REQUESTS` | 5 | ログインエンドポイントの制限（1分あたり） |
+| `RATE_LIMIT_TRUSTED_PROXIES` | [] | 信頼するプロキシのCIDRリスト |
+
+## マルチテナント対応
+
+### データベーススキーマ
+
+```sql
+CREATE TABLE tenants (
+    id UUID PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE user_profiles (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES tenants(id),
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL
+);
+
+-- Row-Level Security
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON user_profiles
+    USING (tenant_id = current_setting('app.tenant_id')::UUID);
 ```
-Request
-   ↓
-SecurityHeadersMiddleware  ← Add security headers
-   ↓
-JWTAuthMiddleware         ← Verify JWT, set request.state.user
-   ↓
-TenantMiddleware          ← SET LOCAL app.current_tenant_id
-   ↓
-Endpoint Handler
+
+### 使用例
+
+```python
+from common_auth import get_db_session, AuthUser
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+@app.get("/api/users")
+async def get_users(
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    # tenant_id が自動的にセットされ、RLS が適用される
+    profiles = db.query(UserProfile).all()
+    return profiles
 ```
 
-## API Endpoints
+## セキュリティ機能
 
-The SDK provides optional endpoints:
+### 自動適用されるヘッダー
 
-- `GET /auth/me` - Get current authenticated user info
-- `GET /auth/health` - Check authentication service health
-- `POST /auth/logout` - Logout (revoke tokens)
+- `Strict-Transport-Security`: HSTS有効化
+- `Content-Security-Policy`: XSS対策
+- `X-Frame-Options`: クリックジャッキング対策
+- `X-Content-Type-Options`: MIMEスニッフィング対策
+- `X-XSS-Protection`: XSSフィルター
+- `Referrer-Policy`: リファラー制御
 
-## Development
+### レート制限（Phase 2）
 
-### Install Development Dependencies
+```python
+from common_auth import InMemoryRateLimitStore
+
+# カスタムストレージでセットアップ
+rate_limit_store = InMemoryRateLimitStore(max_size=10000)
+setup_auth(app, config, rate_limit_store=rate_limit_store)
+```
+
+## 開発
+
+### テストの実行
 
 ```bash
-pip install -e ".[dev]"
+cd packages/backend-sdk
+python -m pytest tests/ -v
 ```
 
-### Run Tests
-
-```bash
-pytest
-```
-
-### Lint
+### リンター
 
 ```bash
 ruff check .
-mypy src
+mypy src/
 ```
 
-## License
+## ライセンス
 
-Apache License 2.0
+MIT
