@@ -273,6 +273,124 @@ Phase 3以降で以下を検討:
    - HashiCorp Vault
    - Docker Secrets
 
+#### Docker Secrets実装例
+
+**シークレット作成**:
+```bash
+# SMTPパスワードをシークレットとして作成
+echo "your-smtp-password" | docker secret create smtp_password -
+
+# または、ファイルから
+echo "your-smtp-password" > smtp_password.txt
+docker secret create smtp_password smtp_password.txt
+rm smtp_password.txt  # 作成後すぐ削除
+```
+
+**docker-compose.prod.yml**:
+```yaml
+version: '3.8'
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start
+    secrets:
+      - smtp_password
+    environment:
+      # 既存の環境変数
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KC_DB: postgres
+      KC_DB_URL: ${KC_DB_URL}
+      
+      # SMTP設定（パスワード以外）
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_USER: ${SMTP_USER}
+      
+      # Docker Secretsを使用（ファイルパス指定）
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    ports:
+      - "8080:8080"
+    networks:
+      - auth-network
+
+secrets:
+  smtp_password:
+    external: true  # 既存のシークレットを参照
+
+networks:
+  auth-network:
+    driver: bridge
+```
+
+**Keycloak起動スクリプト調整**:
+```bash
+#!/bin/bash
+# entrypoint-wrapper.sh
+
+# Docker Secretsからパスワード読み込み
+if [ -f /run/secrets/smtp_password ]; then
+  export SMTP_PASSWORD=$(cat /run/secrets/smtp_password)
+fi
+
+# Keycloak起動
+exec /opt/keycloak/bin/kc.sh "$@"
+```
+
+**Dockerfile調整** (カスタムイメージ使用の場合):
+```dockerfile
+FROM quay.io/keycloak/keycloak:24.0
+
+COPY entrypoint-wrapper.sh /opt/keycloak/bin/
+RUN chmod +x /opt/keycloak/bin/entrypoint-wrapper.sh
+
+ENTRYPOINT ["/opt/keycloak/bin/entrypoint-wrapper.sh"]
+CMD ["start"]
+```
+
+**デプロイ**:
+```bash
+# Docker Swarm mode
+docker stack deploy -c docker-compose.prod.yml auth-stack
+
+# Docker Compose（Swarm不使用の場合、ファイル直接マウント）
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+#### AWS Secrets Manager連携例
+
+```bash
+# AWS CLIでシークレット取得
+aws secretsmanager get-secret-value \
+  --secret-id prod/common-auth/smtp-password \
+  --query SecretString \
+  --output text
+```
+
+**docker-compose.yml with AWS Secrets**:
+```yaml
+services:
+  keycloak:
+    environment:
+      SMTP_PASSWORD: ${SMTP_PASSWORD}  # 起動前にAWS Secretsから取得して設定
+```
+
+**起動スクリプト**:
+```bash
+#!/bin/bash
+# start-with-secrets.sh
+
+# AWS Secrets Managerからパスワード取得
+export SMTP_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id prod/common-auth/smtp-password \
+  --query SecretString \
+  --output text)
+
+# Docker Compose起動
+docker-compose up -d
+```
+
 ### SPF/DKIM設定
 
 Email到達率向上のため、送信元ドメインに以下を設定:

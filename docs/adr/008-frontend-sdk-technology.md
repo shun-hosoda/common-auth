@@ -105,21 +105,73 @@ export function useAuth(): AuthContextValue {
 interface AuthGuardProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
+  onUnauthenticated?: () => void;  // カスタムハンドラー（ライブラリ非依存）
 }
 
-export function AuthGuard({ children, fallback }: AuthGuardProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+export function AuthGuard({ 
+  children, 
+  fallback,
+  onUnauthenticated 
+}: AuthGuardProps) {
+  const { isAuthenticated, isLoading, login } = useAuth();
   
   if (isLoading) {
-    return fallback || <div>Loading...</div>;
+    return <>{fallback || <div>Loading...</div>}</>;
   }
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+    // カスタムハンドラーがあればそれを実行
+    if (onUnauthenticated) {
+      onUnauthenticated();
+      return null;  // リダイレクト中
+    }
+    
+    // デフォルト: ログインページへ遷移
+    login();
+    return null;
   }
   
   return <>{children}</>;
 }
+```
+
+**使用例（React Router v6）**:
+```tsx
+<Route path="/dashboard" element={
+  <AuthGuard>
+    <Dashboard />
+  </AuthGuard>
+} />
+```
+
+**使用例（Next.js App Router）**:
+```tsx
+'use client';
+
+export default function ProtectedPage() {
+  const router = useRouter();
+  
+  return (
+    <AuthGuard 
+      onUnauthenticated={() => router.push('/login')}
+    >
+      <Dashboard />
+    </AuthGuard>
+  );
+}
+```
+
+**使用例（カスタムハンドラー）**:
+```tsx
+<AuthGuard 
+  onUnauthenticated={() => {
+    // ログイン前のパスを保存
+    sessionStorage.setItem('returnUrl', window.location.pathname);
+    login();
+  }}
+>
+  <ProtectedContent />
+</AuthGuard>
 ```
 
 ## 選択肢
@@ -277,6 +329,178 @@ Phase 3以降で拡張検討:
 - エラーハンドリング強化
 - ローディング状態の詳細化
 - ユーザー情報キャッシュ戦略
+
+### テスト戦略
+
+#### 1. ユニットテスト（Jest + React Testing Library）
+
+**useAuth Hookのテスト**:
+```typescript
+import { renderHook, act, waitFor } from '@testing-library/react';
+import { useAuth } from './useAuth';
+import { AuthProvider } from './AuthProvider';
+
+describe('useAuth', () => {
+  it('should login successfully', async () => {
+    const wrapper = ({ children }) => (
+      <AuthProvider
+        authority="http://localhost:8080/realms/test"
+        clientId="test-client"
+        redirectUri="http://localhost:3000/callback"
+        postLogoutRedirectUri="http://localhost:3000"
+      >
+        {children}
+      </AuthProvider>
+    );
+    
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    
+    act(() => {
+      result.current.login();
+    });
+    
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+  });
+});
+```
+
+#### 2. UserManager依存注入パターン
+
+```typescript
+// AuthProvider.tsx
+interface AuthProviderProps {
+  children: React.ReactNode;
+  authority: string;
+  clientId: string;
+  redirectUri: string;
+  postLogoutRedirectUri: string;
+  userManager?: UserManager;  // テスト用に注入可能
+}
+
+export function AuthProvider({
+  children,
+  userManager: externalUserManager,
+  ...config
+}: AuthProviderProps) {
+  const userManager = useMemo(() => {
+    // 外部から注入されていればそれを使用（テスト用）
+    if (externalUserManager) {
+      return externalUserManager;
+    }
+    
+    // 通常はここで生成
+    return new UserManager({
+      authority: config.authority,
+      client_id: config.clientId,
+      // ...
+    });
+  }, [externalUserManager, config]);
+  
+  // ...
+}
+```
+
+**テストでの使用**:
+```typescript
+const mockUserManager = {
+  signinRedirect: jest.fn(),
+  signoutRedirect: jest.fn(),
+  getUser: jest.fn().mockResolvedValue(mockUser),
+  events: {
+    addUserLoaded: jest.fn(),
+    addUserUnloaded: jest.fn(),
+    addAccessTokenExpired: jest.fn(),
+  }
+} as unknown as UserManager;
+
+<AuthProvider
+  authority="..."
+  clientId="..."
+  redirectUri="..."
+  postLogoutRedirectUri="..."
+  userManager={mockUserManager}
+>
+  {children}
+</AuthProvider>
+```
+
+#### 3. MSW (Mock Service Worker)によるOIDCエンドポイントモック
+
+```typescript
+// mocks/handlers.ts
+import { http, HttpResponse } from 'msw';
+
+export const handlers = [
+  // OIDC Discovery
+  http.get('http://localhost:8080/realms/test/.well-known/openid-configuration', () => {
+    return HttpResponse.json({
+      issuer: 'http://localhost:8080/realms/test',
+      authorization_endpoint: 'http://localhost:8080/realms/test/protocol/openid-connect/auth',
+      token_endpoint: 'http://localhost:8080/realms/test/protocol/openid-connect/token',
+      userinfo_endpoint: 'http://localhost:8080/realms/test/protocol/openid-connect/userinfo',
+      jwks_uri: 'http://localhost:8080/realms/test/protocol/openid-connect/certs',
+    });
+  }),
+  
+  // JWKS
+  http.get('http://localhost:8080/realms/test/protocol/openid-connect/certs', () => {
+    return HttpResponse.json({
+      keys: [/* mock JWKS */]
+    });
+  }),
+  
+  // Token Exchange
+  http.post('http://localhost:8080/realms/test/protocol/openid-connect/token', () => {
+    return HttpResponse.json({
+      access_token: 'mock-access-token',
+      id_token: 'mock-id-token',
+      refresh_token: 'mock-refresh-token',
+      token_type: 'Bearer',
+      expires_in: 300
+    });
+  }),
+];
+```
+
+**setup.ts**:
+```typescript
+import { setupServer } from 'msw/node';
+import { handlers } from './mocks/handlers';
+
+export const server = setupServer(...handlers);
+
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+#### 4. E2Eテスト（Playwright）
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test('user can login and access protected page', async ({ page }) => {
+  // アプリにアクセス
+  await page.goto('http://localhost:3000');
+  
+  // Loginボタンクリック
+  await page.click('button:text("Login")');
+  
+  // Keycloakログインページへリダイレクト（実際のKeycloak使用）
+  await expect(page).toHaveURL(/.*realms.*protocol\/openid-connect\/auth.*/);
+  
+  // ログイン実行
+  await page.fill('input[name="username"]', 'testuser@example.com');
+  await page.fill('input[name="password"]', 'password');
+  await page.click('input[type="submit"]');
+  
+  // コールバック後、ダッシュボードへ
+  await expect(page).toHaveURL('http://localhost:3000/dashboard');
+  await expect(page.locator('h1')).toContainText('Welcome');
+});
+```
 
 ### Keycloak連携の実装パターン
 

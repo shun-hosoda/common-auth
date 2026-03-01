@@ -145,14 +145,167 @@ class RateLimitStore(ABC):
   - **対策**: Phase 3でRedis対応を実装する。`RateLimitStore`抽象化により、コードの大部分は変更不要。
 
 - **メモリ使用量**: TTLCacheで最大10,000クライアントを保持（約500KB程度）。大規模システムではmaxsizeを調整可能。
+  - **推奨値**: 小規模システム（<1,000ユーザー）: maxsize=10,000、大規模システム（>10,000ユーザー）: maxsize=100,000以上
+  - **実測メモリ**: Pythonオブジェクトオーバーヘッド含め、1エントリ約100-150バイト。maxsize=10,000で約1.5MB、maxsize=100,000で約15MB
+
+- **キャッシュ満杯時の挙動**: TTLCacheはLRU (Least Recently Used) evictionを使用。キャッシュが満杯になると、最も古いエントリが削除される。
+  - **影響**: 頻繁にアクセスするIPは保護されるが、散発的な攻撃者（多数のIPを使う攻撃）は制限を回避できる可能性がある
+  - **対策**: キャッシュ満杯時にWARNINGログを出力し、監視アラートで検知。Phase 3でRedis移行時に根本解決
 
 - **再起動時の状態**: アプリ再起動でRate Limiting状態がリセットされる。これは攻撃者が再起動を誘発することで制限を回避できる可能性があるが、Phase 1の要件では許容範囲。
+
+### 実装詳細ガイド
+
+#### X-Forwarded-For検証の実装
+
+```python
+from ipaddress import ip_address, ip_network, AddressValueError
+import logging
+
+logger = logging.getLogger(__name__)
+
+def _get_client_ip(self, request: Request) -> str:
+    """
+    実クライアントIPを取得。X-Forwarded-Forを考慮。
+    
+    Args:
+        request: FastAPI Request
+    
+    Returns:
+        クライアントIP文字列
+    """
+    # X-Forwarded-For検証
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded and self._is_trusted_proxy(request.client.host):
+        # 最初のIPを返す（クライアント側）
+        return forwarded.split(",")[0].strip()
+    return request.client.host
+
+def _is_trusted_proxy(self, ip: str) -> bool:
+    """
+    プロキシが信頼リストに含まれるか確認。
+    
+    Args:
+        ip: チェック対象のIPアドレス
+    
+    Returns:
+        信頼できるプロキシの場合True
+    
+    Example:
+        config.rate_limit_trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12"]
+    """
+    if not self.config.rate_limit_trusted_proxies:
+        # 信頼プロキシ未設定の場合、X-Forwarded-Forを信用しない
+        return False
+    
+    try:
+        client_ip = ip_address(ip)
+        for cidr in self.config.rate_limit_trusted_proxies:
+            try:
+                if client_ip in ip_network(cidr):
+                    return True
+            except (ValueError, AddressValueError):
+                logger.warning(f"Invalid CIDR range in trusted_proxies: {cidr}")
+                continue
+    except (ValueError, AddressValueError):
+        logger.warning(f"Invalid IP address: {ip}")
+        return False
+    
+    return False
+```
+
+**設定例**:
+```python
+# AWS ALB背後
+rate_limit_trusted_proxies = ["10.0.0.0/8"]
+
+# Cloudflare背後
+rate_limit_trusted_proxies = [
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22",
+    # ... Cloudflare IP ranges
+]
+
+# 複数プロキシ
+rate_limit_trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+```
+
+#### キャッシュ満杯検知のログ実装
+
+```python
+class InMemoryRateLimitStore(RateLimitStore):
+    def __init__(self, maxsize: int = 10000):
+        self._cache: TTLCache = TTLCache(maxsize=maxsize, ttl=60)
+        self._lock = threading.Lock()
+        self._last_warning = 0  # 最後の警告時刻
+    
+    def check_and_increment(self, key: str, limit: int, window: int) -> tuple[bool, int]:
+        with self._lock:
+            # キャッシュ使用率チェック
+            if len(self._cache) >= self._cache.maxsize * 0.9:
+                # 90%以上で警告（1分に1回まで）
+                import time
+                now = time.time()
+                if now - self._last_warning > 60:
+                    logger.warning(
+                        f"Rate limit cache usage high: {len(self._cache)}/{self._cache.maxsize}. "
+                        "Consider increasing maxsize or migrating to Redis."
+                    )
+                    self._last_warning = now
+            
+            current = self._cache.get(key, 0)
+            if current >= limit:
+                return (False, 0)
+            self._cache[key] = current + 1
+            remaining = limit - (current + 1)
+            return (True, remaining)
+```
 
 ### セキュリティ考慮事項
 
 - **X-Forwarded-For検証**: 信頼プロキシのCIDR範囲を設定し、範囲外のプロキシからの`X-Forwarded-For`は無視する。
 - **分散DoS対応**: 多数の異なるIPからの攻撃には効果が限定的。CDNレベルのDDoS対策が別途必要。
 - **認証済みエンドポイント**: 将来的にユーザーID単位のRate Limitingも検討（1ユーザーが複数IPから攻撃する場合への対策）。
+
+### Phase 3での拡張計画
+
+#### ユーザーID単位Rate Limiting
+
+認証済みエンドポイントに対して、ユーザーID単位のRate Limitingを追加実装予定。
+
+**ユースケース**:
+- 1ユーザーが複数IP（プロキシ、VPN切り替え）から大量リクエストを送る攻撃
+- API abuse（正規ユーザーによる過剰利用）
+
+**実装方針**:
+```python
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # IP単位チェック（既存）
+        ip_key = f"ratelimit:ip:{client_ip}:{path}"
+        ip_allowed, _ = self.store.check_and_increment(ip_key, ip_limit, 60)
+        
+        if not ip_allowed:
+            return JSONResponse(status_code=429, ...)
+        
+        # 認証済みの場合、ユーザーID単位でもチェック
+        if hasattr(request.state, 'user') and request.state.user:
+            user_id = request.state.user.sub
+            user_key = f"ratelimit:user:{user_id}:{path}"
+            user_allowed, _ = self.store.check_and_increment(user_key, user_limit, 60)
+            
+            if not user_allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "user_rate_limit_exceeded", ...}
+                )
+        
+        return await call_next(request)
+```
+
+**設定追加**:
+```python
+rate_limit_user_requests: int = 120  # 認証済みユーザーはIP制限の2倍
+```
 
 ## 参考
 

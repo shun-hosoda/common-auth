@@ -1,37 +1,209 @@
 openapi: 3.1.0
 info:
-  title: API Specification
-  version: 0.1.0
+  title: common-auth Backend SDK API
+  version: 1.0.0
   description: |
-    API仕様書テンプレート。
-    実装前にエンドポイントを定義し、設計レビューを通過すること。
+    共通認証モジュールのBackend SDKが提供するオプショナルAPIルーター。
+    業務アプリケーションにマウントして使用する。
+    認証フロー自体はKeycloak (OIDC) が処理し、本APIはトークン検証後の
+    ユーザー情報取得・死活監視・ログアウト処理を担当する。
 
 servers:
-  - url: http://localhost:3000
+  - url: http://localhost:8000
     description: Local development
 
-paths: {}
-  # /example:
-  #   get:
-  #     summary: サンプルエンドポイント
-  #     operationId: getExample
-  #     tags: [example]
-  #     responses:
-  #       '200':
-  #         description: 成功
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/ExampleResponse'
+paths:
+  /auth/me:
+    get:
+      summary: 現在の認証ユーザー情報を取得
+      description: |
+        JWTアクセストークンをデコードし、現在のユーザー情報を返却する。
+        user_profilesへのLazy Syncが有効な場合、業務DBのプロフィール情報も含む。
+      operationId: getAuthMe
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 認証ユーザー情報
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserResponse"
+        "401":
+          description: 未認証（トークンなし or 無効）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/health:
+    get:
+      summary: Auth Stack死活監視
+      description: |
+        Keycloakへの接続状態とJWKS公開鍵の取得状態を確認する。
+        認証不要のパブリックエンドポイント。
+      operationId: getAuthHealth
+      tags: [auth]
+      responses:
+        "200":
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Keycloak接続不可
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/logout:
+    post:
+      summary: ログアウト（トークン失効）
+      description: |
+        Keycloakのトークン失効エンドポイントにリフレッシュトークンを送信し、
+        サーバーサイドでセッションを無効化する。
+      operationId: postAuthLogout
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoutRequest"
+      responses:
+        "204":
+          description: ログアウト成功
+        "401":
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
-  schemas: {}
-    # ExampleResponse:
-    #   type: object
-    #   required: [id, name]
-    #   properties:
-    #     id:
-    #       type: string
-    #       format: uuid
-    #     name:
-    #       type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Keycloakが発行するJWTアクセストークン
+
+  schemas:
+    AuthUserResponse:
+      type: object
+      required: [sub, tenant_id, email]
+      properties:
+        sub:
+          type: string
+          format: uuid
+          description: Keycloakユーザー識別子（不変UUID）
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        tenant_id:
+          type: string
+          description: テナント識別子（Realm名またはカスタムクレーム値）
+          example: "customer-a"
+        email:
+          type: string
+          format: email
+          description: メールアドレス
+          example: "user@example.com"
+        email_verified:
+          type: boolean
+          description: メールアドレス確認済みフラグ
+          example: true
+        display_name:
+          type: string
+          description: 表示名
+          example: "山田太郎"
+        roles:
+          type: array
+          items:
+            type: string
+          description: Keycloak Realm/Clientロール
+          example: ["user", "admin"]
+        iat:
+          type: integer
+          description: トークン発行時刻（Unix epoch）
+        exp:
+          type: integer
+          description: トークン有効期限（Unix epoch）
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: 全体の状態
+        keycloak:
+          type: object
+          properties:
+            reachable:
+              type: boolean
+              description: Keycloakへの接続可否
+            url:
+              type: string
+              description: Keycloak URL
+        jwks:
+          type: object
+          properties:
+            cached:
+              type: boolean
+              description: JWKS公開鍵がキャッシュ済みか
+            last_refreshed:
+              type: string
+              format: date-time
+              description: 最終JWKS取得時刻
+
+    LogoutRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+          description: リフレッシュトークン（指定時はKeycloakでも失効させる）
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: エラーコード
+          example: "unauthorized"
+        message:
+          type: string
+          description: エラーメッセージ
+          example: "Invalid or expired token"
+        detail:
+          type: string
+          description: 詳細情報（開発環境のみ）
+          example: "Token signature verification failed"
+
+    # エラーレスポンス一覧
+    # 
+    # Backend SDK（認証ミドルウェア）が返すエラー:
+    # 
+    # | HTTPステータス | error | message | 発生条件 |
+    # |---|---|---|---|
+    # | 401 | unauthorized | Invalid or expired token | JWT検証失敗（署名不一致、有効期限切れ） |
+    # | 401 | unauthorized | Missing authorization header | Authorizationヘッダなし |
+    # | 401 | unauthorized | Invalid token format | Bearer形式でない、不正なJWT |
+    # | 403 | forbidden | Insufficient permissions | ロール/スコープ不足 |
+    # | 500 | internal_server_error | Authentication service error | 設定不備（環境変数不足） |
+    # | 503 | service_unavailable | Keycloak unavailable | Keycloak接続失敗、JWKS取得失敗 |
+    # 
+    # Graceful Degradation戦略（JWKS取得失敗時）:
+    # - JWKS公開鍵キャッシュが有効（24時間以内）→ キャッシュで検証継続
+    # - キャッシュ期限切れ → 503エラーを返し、リトライを促す
+    # - 未知のkid検出時 → JWKS即時リフレッシュ、失敗時は503
+    # 
+    # 設定バリデーション:
+    # - 起動時に必須環境変数（KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID）を確認
+    # - 不足時は明確なエラーメッセージで起動を中断
+    #   例: "Configuration error: KEYCLOAK_URL is required"
