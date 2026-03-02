@@ -144,7 +144,9 @@
               "manage-users",
               "view-users",
               "query-users",
-              "query-groups"
+              "query-groups",
+              "manage-group-membership",
+              "view-realm"
             ]
           }
         }
@@ -324,5 +326,6 @@
   },
   "internationalizationEnabled": false,
   "supportedLocales": ["en"],
-  "defaultLocale": "en"
+  "defaultLocale": "en",
+  "defaultRoles": ["offline_access", "uma_authorization", "user"]
 }

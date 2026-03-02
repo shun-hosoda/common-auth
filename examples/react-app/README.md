@@ -79,15 +79,18 @@ http://localhost:3000 を開く
 
 ## テストユーザー
 
-| ユーザー | パスワード | ロール | 利用できる機能 |
-|----------|-----------|--------|----------------|
-| `testuser@example.com` | `password123` | user | ダッシュボード、MFA設定 |
-| `admin@example.com` | `admin123` | tenant_admin | ユーザー管理画面（Keycloak管理コンソールへのリンク） |
-| `superadmin@example.com` | `superadmin123` | super_admin | ユーザー管理 + Keycloak管理コンソール（フル） |
+| ユーザー | パスワード | テナント | ロール | 利用できる機能 |
+|----------|-----------|---------|--------|----------------|
+| `testuser@example.com` | `password123` | acme-corp | user | ダッシュボード、MFA設定 |
+| `admin@example.com` | `admin123` | acme-corp | tenant_admin | ユーザー管理画面（一覧・登録・編集） |
+| `testuser2@example.com` | `password123` | globex-inc | user | ダッシュボード、MFA設定 |
+| `superadmin@example.com` | `superadmin123` | なし | super_admin | 全ユーザー管理 + Keycloak管理コンソール |
+
+> **テナント分離の確認**: `admin@example.com`（acme-corp）でログインするとacme-corpのユーザーのみ表示されます。
 
 ## ログインフロー
 
-1. **ログイン** をクリック → Keycloakログイン画面にリダイレクト
+1. `http://localhost:3000` を開く → 未ログイン時は自動的にKeycloakログイン画面へリダイレクト
 2. 認証情報を入力（上記テストユーザー参照）
 3. （任意）MFA有効時はTOTPコードを入力
 4. `/callback` → `/dashboard` にリダイレクトされる
