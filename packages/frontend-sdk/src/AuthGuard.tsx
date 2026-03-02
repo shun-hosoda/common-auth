@@ -5,8 +5,10 @@ export function AuthGuard({
   children,
   fallback,
   onUnauthenticated,
+  requiredRoles,
+  unauthorizedFallback,
 }: AuthGuardProps) {
-  const { isAuthenticated, isLoading, login } = useAuth();
+  const { isAuthenticated, isLoading, login, hasRole } = useAuth();
 
   if (isLoading) {
     return <>{fallback || <div>Loading...</div>}</>;
@@ -19,6 +21,13 @@ export function AuthGuard({
     }
     login();
     return null;
+  }
+
+  if (requiredRoles && requiredRoles.length > 0) {
+    const hasRequiredRole = requiredRoles.some((role) => hasRole(role));
+    if (!hasRequiredRole) {
+      return <>{unauthorizedFallback || <div>Access Denied</div>}</>;
+    }
   }
 
   return <>{children}</>;

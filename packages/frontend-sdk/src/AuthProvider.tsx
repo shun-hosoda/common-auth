@@ -3,6 +3,14 @@ import { UserManager, User } from "oidc-client-ts";
 import { AuthContext } from "./AuthContext";
 import type { AuthProviderProps } from "./types";
 
+function extractRealmRoles(profile: User["profile"]): string[] {
+  if (!profile || typeof profile !== "object") return [];
+  const realmAccess = (profile as Record<string, unknown>).realm_access;
+  if (!realmAccess || typeof realmAccess !== "object") return [];
+  const roles = (realmAccess as Record<string, unknown>).roles;
+  return Array.isArray(roles) ? (roles as string[]) : [];
+}
+
 export function AuthProvider({
   authority,
   clientId,
@@ -10,6 +18,7 @@ export function AuthProvider({
   postLogoutRedirectUri,
   scope = "openid profile email",
   automaticSilentRenew = true,
+  keycloakBaseUrl,
   children,
 }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
@@ -110,6 +119,22 @@ export function AuthProvider({
     return user?.access_token || null;
   }, [user]);
 
+  const hasRole = useCallback(
+    (role: string): boolean => {
+      if (!user) return false;
+      return extractRealmRoles(user.profile).includes(role);
+    },
+    [user]
+  );
+
+  const openUserManagement = useCallback(() => {
+    const realmsParts = authority.split("/realms/");
+    const baseUrl = keycloakBaseUrl ?? (realmsParts.length >= 2 ? realmsParts[0] : authority);
+    const realm = realmsParts.length >= 2 ? realmsParts[1] : "master";
+    const managementUrl = `${baseUrl}/admin/${realm}/console/#/users`;
+    window.open(managementUrl, "_blank", "noopener,noreferrer");
+  }, [authority, keycloakBaseUrl]);
+
   const handleCallback = useCallback(async () => {
     try {
       setError(null);
@@ -134,8 +159,10 @@ export function AuthProvider({
       configureMFA,
       handleCallback,
       getAccessToken,
+      hasRole,
+      openUserManagement,
     }),
-    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, handleCallback, getAccessToken]
+    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, handleCallback, getAccessToken, hasRole, openUserManagement]
   );
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

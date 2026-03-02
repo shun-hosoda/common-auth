@@ -83,11 +83,40 @@
     "realm": [
       {
         "name": "user",
-        "description": "Standard user role"
+        "description": "Standard user role",
+        "composite": false
       },
       {
         "name": "admin",
-        "description": "Administrator role"
+        "description": "Legacy administrator role",
+        "composite": false
+      },
+      {
+        "name": "tenant_admin",
+        "description": "Tenant administrator: can manage users within the tenant",
+        "composite": true,
+        "composites": {
+          "client": {
+            "realm-management": [
+              "manage-users",
+              "view-users",
+              "query-users",
+              "query-groups"
+            ]
+          }
+        }
+      },
+      {
+        "name": "super_admin",
+        "description": "Super administrator: can manage all clients and realms",
+        "composite": true,
+        "composites": {
+          "client": {
+            "realm-management": [
+              "realm-admin"
+            ]
+          }
+        }
       }
     ]
   },
@@ -115,8 +144,8 @@
       "email": "admin@example.com",
       "emailVerified": true,
       "enabled": true,
-      "firstName": "Admin",
-      "lastName": "User",
+      "firstName": "Tenant",
+      "lastName": "Admin",
       "credentials": [
         {
           "type": "password",
@@ -126,7 +155,26 @@
       ],
       "realmRoles": [
         "user",
-        "admin"
+        "tenant_admin"
+      ]
+    },
+    {
+      "username": "superadmin@example.com",
+      "email": "superadmin@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Super",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "superadmin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user",
+        "super_admin"
       ]
     }
   ],

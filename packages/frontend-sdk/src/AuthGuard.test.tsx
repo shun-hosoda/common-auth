@@ -14,6 +14,9 @@ const createMockContext = (overrides: Partial<AuthContextValue> = {}): AuthConte
   resetPassword: jest.fn(),
   configureMFA: jest.fn(),
   getAccessToken: jest.fn(),
+  handleCallback: jest.fn(),
+  hasRole: jest.fn().mockReturnValue(false),
+  openUserManagement: jest.fn(),
   ...overrides,
 });
 
@@ -92,5 +95,61 @@ describe("AuthGuard", () => {
 
     expect(onUnauthenticatedMock).toHaveBeenCalled();
     expect(loginMock).not.toHaveBeenCalled();
+  });
+
+  it("renders children when authenticated and has required role", () => {
+    const mockContext = createMockContext({
+      isAuthenticated: true,
+      hasRole: jest.fn().mockReturnValue(true),
+    });
+
+    render(
+      <AuthContext.Provider value={mockContext}>
+        <AuthGuard requiredRoles={["tenant_admin"]}>
+          <div>Admin Content</div>
+        </AuthGuard>
+      </AuthContext.Provider>
+    );
+
+    expect(screen.getByText("Admin Content")).toBeInTheDocument();
+  });
+
+  it("shows Access Denied when authenticated but lacks required role", () => {
+    const mockContext = createMockContext({
+      isAuthenticated: true,
+      hasRole: jest.fn().mockReturnValue(false),
+    });
+
+    render(
+      <AuthContext.Provider value={mockContext}>
+        <AuthGuard requiredRoles={["tenant_admin"]}>
+          <div>Admin Content</div>
+        </AuthGuard>
+      </AuthContext.Provider>
+    );
+
+    expect(screen.getByText("Access Denied")).toBeInTheDocument();
+    expect(screen.queryByText("Admin Content")).not.toBeInTheDocument();
+  });
+
+  it("shows custom unauthorizedFallback when lacking required role", () => {
+    const mockContext = createMockContext({
+      isAuthenticated: true,
+      hasRole: jest.fn().mockReturnValue(false),
+    });
+
+    render(
+      <AuthContext.Provider value={mockContext}>
+        <AuthGuard
+          requiredRoles={["super_admin"]}
+          unauthorizedFallback={<div>No Permission</div>}
+        >
+          <div>Super Admin Content</div>
+        </AuthGuard>
+      </AuthContext.Provider>
+    );
+
+    expect(screen.getByText("No Permission")).toBeInTheDocument();
+    expect(screen.queryByText("Super Admin Content")).not.toBeInTheDocument();
   });
 });

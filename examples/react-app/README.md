@@ -9,6 +9,8 @@
 - パスワードリセット（メール通知）
 - ユーザー自己登録
 - ユーザープロフィールとトークン情報を表示するダッシュボード
+- **ロールベースUI制御**: ロール（user / tenant_admin / super_admin）に応じて画面表示を切替
+- **ユーザー管理**: tenant_admin以上のユーザーはKeycloak管理コンソールへのリンクを表示
 
 ## 前提条件
 
@@ -47,7 +49,26 @@ docker-compose down -v
 docker-compose up -d
 ```
 
-### 3. インストール & 実行
+### 3. 環境変数の設定
+
+```bash
+cp .env.example .env
+```
+
+`.env` を編集してKeycloak接続情報を設定します：
+
+```env
+VITE_KEYCLOAK_URL=http://localhost:8080   # Keycloak のベースURL（必須）
+VITE_KEYCLOAK_REALM=common-auth           # Keycloak のRealm名（必須）
+```
+
+> **本番デプロイ時の注意**
+> 
+> `VITE_KEYCLOAK_URL` を本番KeycloakのURLに変更してください。
+> 未設定の場合は `http://localhost:8080` がデフォルト値として使われます。
+> 本番環境でlocalhost URLを含むビルドがデプロイされないよう注意してください。
+
+### 4. インストール & 実行
 
 ```bash
 npm install
@@ -56,10 +77,18 @@ npm run dev
 
 http://localhost:3000 を開く
 
+## テストユーザー
+
+| ユーザー | パスワード | ロール | 利用できる機能 |
+|----------|-----------|--------|----------------|
+| `testuser@example.com` | `password123` | user | ダッシュボード、MFA設定 |
+| `admin@example.com` | `admin123` | tenant_admin | ユーザー管理画面（Keycloak管理コンソールへのリンク） |
+| `superadmin@example.com` | `superadmin123` | super_admin | ユーザー管理 + Keycloak管理コンソール（フル） |
+
 ## ログインフロー
 
-1. **Login** をクリック → Keycloakログイン画面にリダイレクト
-2. 認証情報を入力: `testuser@example.com` / `password123`
+1. **ログイン** をクリック → Keycloakログイン画面にリダイレクト
+2. 認証情報を入力（上記テストユーザー参照）
 3. （任意）MFA有効時はTOTPコードを入力
 4. `/callback` → `/dashboard` にリダイレクトされる
 
