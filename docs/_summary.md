@@ -25,13 +25,15 @@
 |-----|---------|
 | 001 | Keycloak採用（OSS、OIDC準拠、Docker対応）|
 | 002 | Authorization Code Flow + PKCE |
-| 003 | Realm単位のマルチテナント分離 |
+| 003 | **SaaS BtoB: Shared Realm + Groups + User Attribute**（旧: Realm per tenant） |
 | 004 | PyJWT + 独自JWKSService（graceful degradation）|
 | 005 | oidc-client-ts + React Hooks wrapper |
 | 006 | Defense in Depth: Middleware + RLS |
 | 007 | Fixed-window Rate Limiting + InMemory Store |
 | 008 | Frontend SDK: AuthProvider + useAuth + AuthGuard |
 | 009 | Keycloak内蔵SMTP（ポータビリティ優先）|
+| 010 | ユーザー管理UI: Keycloak管理コンソール委譲 |
+| 011 | ロールベースアクセス制御（Keycloakロール + JWTクレーム）|
 
 ## Backend SDK構成
 
@@ -57,8 +59,11 @@ KEYCLOAK_URL=http://localhost:8080
 KEYCLOAK_REALM=common-auth
 KEYCLOAK_CLIENT_ID=backend-app
 
+# テナント識別（SaaS BtoB: custom推奨）
+TENANT_ID_SOURCE=custom        # custom | iss | fixed
+TENANT_ID_CLAIM=tenant_id      # TENANT_ID_SOURCE=custom 時に必須
+
 # オプション
-TENANT_ID_SOURCE=iss|custom|fixed
 JWKS_CACHE_TTL=86400
 ENABLE_RLS=true
 RATE_LIMIT_ENABLED=true

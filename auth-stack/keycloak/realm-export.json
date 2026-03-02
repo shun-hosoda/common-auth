@@ -27,11 +27,38 @@
   "accessTokenLifespanForImplicitFlow": 900,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
+  "clientScopes": [
+    {
+      "name": "tenant",
+      "description": "Adds tenant_id claim from user attribute",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant-id-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "tenant_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
   "clients": [
     {
       "clientId": "backend-app",
       "name": "Backend Application",
-      "description": "Backend SDK test client",
+      "description": "Backend SDK client (confidential)",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "**********",
@@ -51,12 +78,20 @@
       "fullScopeAllowed": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": false
+      "serviceAccountsEnabled": false,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "tenant"
+      ]
     },
     {
       "clientId": "example-app",
       "name": "Example Application",
-      "description": "Example app for frontend and backend integration",
+      "description": "Example app for frontend (public client)",
       "enabled": true,
       "publicClient": true,
       "redirectUris": [
@@ -76,7 +111,15 @@
       "directAccessGrantsEnabled": true,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
-      "fullScopeAllowed": true
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "tenant"
+      ]
     }
   ],
   "roles": {
@@ -108,7 +151,7 @@
       },
       {
         "name": "super_admin",
-        "description": "Super administrator: can manage all clients and realms",
+        "description": "Super administrator: full realm management",
         "composite": true,
         "composites": {
           "client": {
@@ -120,6 +163,28 @@
       }
     ]
   },
+  "groups": [
+    {
+      "name": "tenants",
+      "path": "/tenants",
+      "subGroups": [
+        {
+          "name": "acme-corp",
+          "path": "/tenants/acme-corp",
+          "attributes": {
+            "tenant_id": ["acme-corp"]
+          }
+        },
+        {
+          "name": "globex-inc",
+          "path": "/tenants/globex-inc",
+          "attributes": {
+            "tenant_id": ["globex-inc"]
+          }
+        }
+      ]
+    }
+  ],
   "users": [
     {
       "username": "testuser@example.com",
@@ -128,6 +193,9 @@
       "enabled": true,
       "firstName": "Test",
       "lastName": "User",
+      "attributes": {
+        "tenant_id": ["acme-corp"]
+      },
       "credentials": [
         {
           "type": "password",
@@ -137,6 +205,9 @@
       ],
       "realmRoles": [
         "user"
+      ],
+      "groups": [
+        "/tenants/acme-corp"
       ]
     },
     {
@@ -146,6 +217,9 @@
       "enabled": true,
       "firstName": "Tenant",
       "lastName": "Admin",
+      "attributes": {
+        "tenant_id": ["acme-corp"]
+      },
       "credentials": [
         {
           "type": "password",
@@ -156,6 +230,33 @@
       "realmRoles": [
         "user",
         "tenant_admin"
+      ],
+      "groups": [
+        "/tenants/acme-corp"
+      ]
+    },
+    {
+      "username": "testuser2@example.com",
+      "email": "testuser2@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Test",
+      "lastName": "User2",
+      "attributes": {
+        "tenant_id": ["globex-inc"]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ],
+      "groups": [
+        "/tenants/globex-inc"
       ]
     },
     {

@@ -39,6 +39,8 @@ htmlcov/
 *.log
 logs/
 !docs/review/logs/
+!docs/design/logs/
+!docs/implementation/logs/
 
 # Terraform
 .terraform/
