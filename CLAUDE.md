@@ -24,7 +24,8 @@
 │       ├── architect/            # 構造・疎結合・拡張性
 │       ├── senior-engineer/      # コード品質・保守性
 │       ├── security-specialist/  # OWASP・脆弱性
-│       └── db-specialist/        # スキーマ・クエリ最適化
+│       ├── db-specialist/        # スキーマ・クエリ最適化
+│       └── ui-design/            # UIデザイン設計・実装（汎用SaaS UI）
 ├── docs/
 │   ├── prd/                  # プロダクト要件定義書
 │   ├── adr/                  # アーキテクチャ決定記録
