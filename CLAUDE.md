@@ -8,10 +8,12 @@
 .
 ├── .cursor/
 │   ├── rules/                # AIの行動ルール
-│   │   ├── core_rules.mdc        # 基本原則（設計第一、ADR駆動）
+│   │   ├── core_rules.mdc        # 基本原則（設計ゲート・品質基準）【最優先】
+│   │   ├── autonomous_workflow.mdc # 実装前ゲートチェック・タスク分類【最優先】
+│   │   ├── self_optimization.mdc # 自己最適化・コンテキスト効率化【常時】
+│   │   ├── efficient_workflow.mdc # 階層化レビュー・バッチ処理
 │   │   ├── commands.mdc          # スラッシュコマンド定義
 │   │   ├── review_process.mdc    # レビューサイクル制御
-│   │   ├── autonomous_workflow.mdc # 自律開発ワークフロー
 │   │   ├── tdd.mdc              # テスト駆動開発
 │   │   └── git_conventions.mdc  # Git規約
 │   └── skills/               # AI専門家ペルソナ
@@ -70,13 +72,24 @@
 | `/push` | APPROVE後にコミット＆プッシュ |
 | `/test` | 単体テスト実行・分析 |
 
+## ⛔ 実装前ゲートチェック（必須）
+
+タスクを受けたら **最初に分類を宣言する**:
+
+| 分類 | 条件 | 実装前に必要なこと |
+|------|------|----------------|
+| Hotfix | ≤10行, バグ修正のみ | なし（Level 1チェックのみ） |
+| Minor | ≤50行, 既存機能改善 | なし（Level 2クイックレビュー） |
+| **Standard** | **新機能, 新ファイル** | **⛔ /design → /review 必須** |
+| **Major** | **アーキテクチャ変更** | **⛔ /design → ADR → /review 必須** |
+
 ## 開発フロー
 
 ```
-要件定義 → /design → /implement → 実装（TDD） → /review → /fix → /re-review → /push
-            ↓          ↓                          ↑                    │
-            設計書     実装計画                    └────────────────────┘
-            更新       記録
+要件定義 → 分類判断 → [Standard/Major] → /design → /implement → 実装（TDD）
+                  └→ [Hotfix/Minor] ──────────────────────────→ 即実装
+
+実装後: /review → /fix → /re-review → /push
 ```
 
 ### フェーズ詳細
