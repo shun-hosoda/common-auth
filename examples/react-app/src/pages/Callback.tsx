@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 
@@ -6,8 +6,12 @@ export default function Callback() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
   const { handleCallback } = useAuth()
+  const callbackProcessed = useRef(false)
 
   useEffect(() => {
+    if (callbackProcessed.current) return
+    callbackProcessed.current = true
+
     const processCallback = async () => {
       try {
         await handleCallback()

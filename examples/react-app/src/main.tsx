@@ -10,7 +10,7 @@ const AUTH_CONFIG = {
   clientId: 'example-app',
   redirectUri: 'http://localhost:3000/callback',
   postLogoutRedirectUri: 'http://localhost:3000',
-  scope: 'openid profile email tenant',
+  scope: 'openid profile email',
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
