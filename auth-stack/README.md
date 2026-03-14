@@ -68,6 +68,8 @@ docker-compose up -d
 | Keycloak | 8080 | Identity Provider |
 | Keycloak DB | (内部) | Keycloak用PostgreSQL |
 | App DB | 5433 | アプリケーション用PostgreSQL (test/dev) |
+| **MailHog** | **8025** | **ローカル開発用ダミーメールサーバー (Web UI)** |
+| **MailHog** | **1025** | **SMTP受信ポート** |
 
 ## アプリケーションデータベース
 
@@ -140,11 +142,31 @@ docker-compose up -d
 
 ### SMTP / メール
 
-パスワードリセットやメール認証にはSMTP設定が必要です。
-`.env` で `SMTP_*` 変数を設定してください。
+ローカル開発環境では **MailHog**（ダミーメールサーバー）が自動起動され、Keycloakのメール送信先に設定されています。
+`.env.example` のデフォルト値のまま、追加設定なしで動作します。
 
-SMTP未設定の場合でもKeycloakは起動しますが、メール依存機能
-（パスワードリセット、メール認証）は失敗します。
+```
+Keycloak → mailhog:1025 (SMTP)
+           → http://localhost:8025 (Web UI で受信メールを確認)
+```
+
+**メール確認手順:**
+1. `docker-compose up -d` で起動
+2. http://localhost:8025 をブラウザで開く
+3. パスワードリセットやメール認証を実行→ MailHogに送信メールが表示される
+
+**本番環境で実SMTPに切り替える場合は、`.env` で変更:**
+
+```bash
+# Gmail例
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_AUTH=true
+SMTP_STARTTLS=true
+# (Gmailの場合は2段階認証 + アプリパスワードの発行が必要)
+```
 
 ### MFA (TOTP)
 

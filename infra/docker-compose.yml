@@ -54,7 +54,7 @@ services:
         condition: service_healthy
 
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     restart: unless-stopped
     ports:
       - "1025:1025"   # SMTP

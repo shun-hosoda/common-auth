@@ -158,12 +158,22 @@ docker-compose up -d
 
 ### パスワードリセットメールが届かない
 
-`auth-stack/.env` でSMTPを設定：
+ローカル開発環境では **MailHog** がダミーメールサーバーとして自動起動しています。
+実際のメールアドレスには届きません。代わりに http://localhost:8025 で確認してください。
+
+```
+http://localhost:8025  ← MailHog Web UI（届いたメールを確認）
+```
+
+本番のSMTPサーバーに切り替える場合は `auth-stack/.env` を編集：
 ```bash
+# Gmail例
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
+SMTP_AUTH=true
+SMTP_STARTTLS=true
 ```
 
 その後Auth Stackを再起動：
