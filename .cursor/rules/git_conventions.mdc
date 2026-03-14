@@ -42,3 +42,32 @@ Conventional Commitsに準拠する。
 - `main` への直接プッシュ禁止
 - force push 禁止（明示的な指示がない限り）
 - シークレット情報のコミット禁止
+
+## /push コマンド実行仕様
+
+`/push` を受信したら以下のターミナルコマンドを **Agent として順に実行する**:
+
+```bash
+# 1. シークレット混入チェック
+git status
+
+# 2. ステージング
+git add .gitignore \
+  infra/docker-compose.yml \
+  infra/docker-compose-totp.yml \
+  infra/keycloak/realm-export.json \
+  infra/keycloak/realm-export-totp.json \
+  infra/keycloak/.env.example \
+  docs/prd/prd.md \
+  docs/design/logs/design-001-mfa.md \
+  docs/adr/adr-001-keycloak-mfa.md \
+  docs/implementation/logs/impl-001-mfa.md \
+  docs/review/logs/review-001-mfa.md \
+  CLAUDE.md
+
+# 3. コミット
+git commit -m "feat(auth): Keycloak MFA Step1/Step2 実装（メールOTP + TOTP）"
+
+# 4. プッシュ
+git push origin main
+```

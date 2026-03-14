@@ -47,3 +47,9 @@ logs/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+
+# ⚠️ シークレット管理: 実際の環境変数ファイルは絶対にコミットしない
+infra/.env
+infra/**/.env
+.env
+**/.env

@@ -1,0 +1,41 @@
+name: AI Autonomous Push
+
+on:
+  push:
+    paths:
+      - 'docs/review/logs/**'
+  workflow_dispatch: {}  # 手動実行トリガーを追加
+
+jobs:
+  push-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure no sensitive files staged
+        run: |
+          if git status --porcelain | grep -E "\.env$"; then
+            echo "ERROR: .env detected in working tree; aborting"
+            exit 1
+          fi
+
+      - name: Commit and Push if changes
+        run: |
+          # ステージ済みの変更がない場合は git add で全てをステージ（必要に応じて調整）
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: autonomous push via GitHub Actions [skip ci]" || true
+            git push origin HEAD:main
+          else
+            echo "No changes to commit"
+          fi

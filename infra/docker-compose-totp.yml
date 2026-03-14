@@ -1,0 +1,56 @@
+# ============================================================
+# Keycloak MFA 開発環境 (顧客B: TOTPアプリ)
+# 起動: docker compose -f docker-compose-totp.yml --env-file .env up -d
+# Keycloak Admin: http://localhost:8080  (admin / KEYCLOAK_ADMIN_PASSWORD)
+# テストユーザー: testuser-totp / Test1234! (初回: パスワード変更 + QR設定)
+#
+# [Note] mailhog は不要: TOTPフローはメール送信を使用しない。
+#        testuser-totp の temporary パスワードはUI上で変更させる（メール不使用）。
+#
+# [Note] docker-compose.yml(Step1) と一部設定が重複している。
+#        共通化は ADR-001 の方針に従い将来対応とし、
+#        現時点は顧客別設定の明確性を優先して独立ファイルを維持する。
+# ============================================================
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KC_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KC_DB_USERNAME:-keycloak}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+    volumes:
+      - postgres_totp_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KC_DB_USERNAME:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      # --- DB ---
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KC_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      # --- Admin ---
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # --- Hostname (開発環境用: strict無効) ---
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      # --- SMTP 不使用（TOTPフローはメール送信なし） ---
+    volumes:
+      - ./keycloak/realm-export-totp.json:/opt/keycloak/data/import/realm-export-totp.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_totp_data:
