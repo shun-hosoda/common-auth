@@ -42,6 +42,9 @@ logs/
 !docs/design/logs/
 !docs/implementation/logs/
 
+# AI input files (internal use only, not for version control)
+.ai-input/
+
 # Terraform
 .terraform/
 *.tfstate

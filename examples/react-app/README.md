@@ -81,12 +81,14 @@ http://localhost:3000 を開く
 
 | ユーザー | パスワード | テナント | ロール | 利用できる機能 |
 |----------|-----------|---------|--------|----------------|
-| `testuser@example.com` | `password123` | acme-corp | user | ダッシュボード、MFA設定 |
-| `admin@example.com` | `admin123` | acme-corp | tenant_admin | ユーザー管理画面（一覧・登録・編集） |
-| `testuser2@example.com` | `password123` | globex-inc | user | ダッシュボード、MFA設定 |
-| `superadmin@example.com` | `superadmin123` | なし | super_admin | 全ユーザー管理 + Keycloak管理コンソール |
+| `testuser_acme-corp@example.com` | `password123` | acme-corp | user | ダッシュボード、MFA設定 |
+| `admin_acme-corp@example.com` | `admin123` | acme-corp | tenant_admin | ユーザー管理画面（一覧・登録・編集） |
+| `testuser_globex-inc@example.com` | `password123` | globex-inc | user | ダッシュボード、MFA設定 |
+| `admin_globex-inc@example.com` | `admin123` | globex-inc | tenant_admin | ユーザー管理画面（一覧・登録・編集） |
 
-> **テナント分離の確認**: `admin@example.com`（acme-corp）でログインするとacme-corpのユーザーのみ表示されます。
+> **テナント分離の確認**: `admin_acme-corp@example.com`（acme-corp）でログインするとacme-corpのユーザーのみ表示されます。`admin_globex-inc@example.com`でログインするとglobex-incのユーザーのみ表示されます。
+
+> **super_admin ロールについて**: `super_admin` ロールはKeycloak Realm定義に存在しますが、デフォルトでは割り当てユーザーがいません。Keycloak管理コンソール（`http://localhost:8080`、`admin` / `admin`）から手動でユーザーにロールを付与してテストできます。
 
 ## ログインフロー
 

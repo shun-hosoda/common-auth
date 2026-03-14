@@ -374,8 +374,8 @@
   ],
   "users": [
     {
-      "username": "testuser@example.com",
-      "email": "testuser@example.com",
+      "username": "testuser_acme-corp@example.com",
+      "email": "testuser_acme-corp@example.com",
       "emailVerified": true,
       "enabled": true,
       "firstName": "Test",
@@ -398,8 +398,8 @@
       ]
     },
     {
-      "username": "admin@example.com",
-      "email": "admin@example.com",
+      "username": "admin_acme-corp@example.com",
+      "email": "admin_acme-corp@example.com",
       "emailVerified": true,
       "enabled": true,
       "firstName": "Tenant",
@@ -423,8 +423,8 @@
       ]
     },
     {
-      "username": "testuser2@example.com",
-      "email": "testuser2@example.com",
+      "username": "testuser_globex-inc@example.com",
+      "email": "testuser_globex-inc@example.com",
       "emailVerified": true,
       "enabled": true,
       "firstName": "Test",
@@ -447,22 +447,28 @@
       ]
     },
     {
-      "username": "superadmin@example.com",
-      "email": "superadmin@example.com",
+      "username": "admin_globex-inc@example.com",
+      "email": "admin_globex-inc@example.com",
       "emailVerified": true,
       "enabled": true,
-      "firstName": "Super",
+      "firstName": "Tenant",
       "lastName": "Admin",
+      "attributes": {
+        "tenant_id": ["globex-inc"]
+      },
       "credentials": [
         {
           "type": "password",
-          "value": "superadmin123",
+          "value": "admin123",
           "temporary": false
         }
       ],
       "realmRoles": [
         "user",
-        "super_admin"
+        "tenant_admin"
+      ],
+      "groups": [
+        "/tenants/globex-inc"
       ]
     }
   ],
