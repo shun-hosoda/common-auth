@@ -15,6 +15,9 @@
 - パスワードリセット（メール通知経由）
 - ユーザー登録
 - 保護されたルート（Dashboard）
+- ユーザー管理画面（tenant_admin以上）
+- ロールベースUI制御（hasRole）
+- Keycloak Themes（ログイン画面カスタマイズ）
 
 ## 2. 技術スタック
 
@@ -64,8 +67,28 @@
     - Logout → ログアウト実行
   - ユーザープロフィールJSON表示（デバッグ用）
   - トークン情報表示（有効期限、スコープ）
+  - ロールベース表示制御:
+    - `tenant_admin`以上 → 「ユーザー管理」ボタン表示（`/admin/users`へ遷移）
+    - `super_admin` → 「テナント管理」ボタン表示（`/admin/clients`へ遷移）
 - **セキュリティ考慮**:
   - トークンコピー機能は本番ビルドでは非表示
+
+### 3.4. Admin Users（ユーザー管理画面）
+- **パス**: `/admin/users`
+- **目的**: テナント内のユーザー管理（一覧・作成・編集・無効化）
+- **コンポーネント**: `src/pages/AdminUsers.tsx`
+- **保護**: `AuthGuard` + `requiredRoles={['tenant_admin']}`
+- **主要機能**:
+  - ユーザー一覧テーブル（名前、メール、ロール、ステータス）
+  - 検索・フィルタ機能
+  - ユーザー新規作成ダイアログ
+  - ユーザー編集（ロール変更、有効/無効切替）
+  - パスワードリセット・MFAリセット操作
+- **API連携**: Backend Admin API (`/admin/users/*`) 経由
+- **UI仕様**: [admin-users.md](../ui/screens/admin-users.md) を参照
+- **セキュリティ考慮**:
+  - テナント境界はBackend APIが強制（フロントはUI制御のみ）
+  - ユーザー削除は論理削除（無効化）のみ
 
 ## 4. 画面遷移フロー
 
@@ -79,6 +102,7 @@
 ┌─────────────┐ ┌──────────────┐ ┌─────────────────────┐
 │ Keycloak    │ │ Keycloak     │ │ Keycloak            │
 │ Login       │ │ Registration │ │ Password Reset      │
+│ (Theme対応) │ │              │ │                     │
 └─────┬───────┘ └──────┬───────┘ └─────┬───────────────┘
       │                │                │
       ▼                │                ▼
@@ -93,17 +117,19 @@
 └─────┬───────────────┘│          └─────────────────────┘
       │                │
       ▼                │
-┌─────────────────────────────────────────────────┐
-│ Dashboard (/dashboard) [AuthGuard Protected]    │
-│  User Profile | [Setup MFA] [Logout]           │
-└─────────────────┬───────────────────────────────┘
-                  │
-                  ▼ Setup MFA
-            ┌─────────────────────┐
-            │ Keycloak            │
-            │ Account Console     │
-            │ (TOTP Setup)        │
-            └─────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ Dashboard (/dashboard) [AuthGuard Protected]                    │
+│  User Profile | [Setup MFA] [Logout]                           │
+│  [ユーザー管理] (tenant_admin以上のみ表示)                       │
+└───────┬──────────────────┬──────────────────────────────────────┘
+        │                  │
+        ▼ Setup MFA        ▼ ユーザー管理
+  ┌───────────────┐  ┌──────────────────────────────────────────┐
+  │ Keycloak      │  │ Admin Users (/admin/users)               │
+  │ Account       │  │ [tenant_admin以上, Backend Admin API経由] │
+  │ Console       │  │ 一覧 → 作成/編集/無効化/PW・MFAリセット   │
+  │ (TOTP Setup)  │  └──────────────────────────────────────────┘
+  └───────────────┘
 ```
 
 ## 5. 認証フローの詳細
@@ -247,13 +273,18 @@ const AUTH_CONFIG = {
 - **Web origins**: `http://localhost:3000`
 
 ### 7.3. SMTP設定（パスワードリセットに必要）
-`auth-stack/.env`:
+
+ローカル開発環境ではMailHogが自動起動されるため、追加設定不要です。
+メール確認: http://localhost:8025 (MailHog Web UI)
+
+本番環境で実SMTPを使う場合は `auth-stack/.env` で変更:
 ```
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
-SMTP_FROM=noreply@example.com
+SMTP_AUTH=true
+SMTP_STARTTLS=true
 ```
 
 ## 8. セキュリティ考慮事項
@@ -307,16 +338,17 @@ SMTP_FROM=noreply@example.com
 
 ## 10. 今後の拡張可能性
 
-### 10.1. ロール・権限管理
-- Keycloakのロールクレームをトークンから取得
-- ロールベースのルート保護（`<AuthGuard requiredRoles={['admin']}>`）
+### 10.1. クライアント管理（super_admin）
+- `/admin/clients` にクライアント（テナント）管理画面を追加
+- super_admin専用、Keycloak Client操作をBackend API経由で提供
 
 ### 10.2. マルチテナント対応
 - テナントIDをOIDC追加パラメータとして渡す
-- テナント固有のブランディング切り替え
+- テナント固有のブランディング切り替え（Keycloak Themes CSS変数の動的切替）
 
 ### 10.3. E2Eテスト
 - Playwright/Cypressによる認証フローのE2Eテスト追加
+- ユーザー管理画面のCRUD操作テスト
 
 ### 10.4. SSR/SSG対応
 - Next.js版の実装例追加

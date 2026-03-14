@@ -17,7 +17,7 @@
 | 1 | Backend SDK基盤 (JWT, JWKS, RLS) | ✅ 完了 |
 | 2a | Rate Limiting, MFA, SMTP | ✅ 完了 |
 | 2b | Frontend SDK (React Hooks) | ✅ 完了 |
-| 3 | Redis対応, 高度な機能 | 📋 計画のみ |
+| 3 | ユーザー管理UI (Custom React + Admin API), Keycloak Themes | 🚧 設計中 |
 
 ## 主要ADR
 
@@ -32,7 +32,7 @@
 | 007 | Fixed-window Rate Limiting + InMemory Store |
 | 008 | Frontend SDK: AuthProvider + useAuth + AuthGuard |
 | 009 | Keycloak内蔵SMTP（ポータビリティ優先）|
-| 010 | ユーザー管理UI: Keycloak管理コンソール委譲 |
+| 010 | ユーザー管理UI: **カスタムReact + Backend Admin API**（Keycloak委譲から変更） |
 | 011 | ロールベースアクセス制御（Keycloakロール + JWTクレーム）|
 
 ## Backend SDK構成
@@ -92,10 +92,11 @@ packages/frontend-sdk/src/
 
 ## 次のタスク
 
-Phase 3: 拡張機能
-1. Redis対応RateLimitStore
-2. カスタムメールテンプレート
-3. ユーザーID単位Rate Limiting
+Phase 3: ユーザー管理 + Keycloak Themes
+1. Backend Admin API（Keycloak Admin REST APIプロキシ）
+2. Reactユーザー管理画面
+3. Keycloakログインテーマ（CSS変数ベース）
+4. テナント境界チェック強化
 
 ---
 
