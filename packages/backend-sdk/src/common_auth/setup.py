@@ -7,6 +7,7 @@ from common_auth.middleware.jwt_auth import JWTAuthMiddleware
 from common_auth.middleware.tenant import TenantMiddleware
 from common_auth.middleware.rate_limit import RateLimitMiddleware, RateLimitStore
 from common_auth.routers.auth import router as auth_router
+from common_auth.routers.admin import router as admin_router
 
 
 def setup_auth(
@@ -63,3 +64,6 @@ def setup_auth(
     
     # Mount authentication router
     app.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+    # Mount admin router (lazy — KeycloakAdminClient is created on first use)
+    app.include_router(admin_router, prefix="/admin", tags=["admin"])

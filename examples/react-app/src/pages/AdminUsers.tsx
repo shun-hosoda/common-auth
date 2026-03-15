@@ -1,20 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 import {
+  type AdminUser,
   type CreateUserInput,
-  type KcUser,
   type UpdateUserInput,
-  addUserToGroup,
-  assignRealmRole,
+  listUsers,
   createUser,
-  findTenantGroup,
-  listAllUsers,
-  listGroupMembers,
-  resetUserPassword,
-  setUserEnabled,
   updateUser,
-} from '../api/keycloakAdmin'
+  disableUser,
+  resetPassword,
+} from '../api/adminApi'
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
@@ -44,7 +40,7 @@ interface EditForm {
 const emptyCreate = (): CreateForm => ({
   email: '', firstName: '', lastName: '', password: '', temporary: true,
 })
-const toEditForm = (u: KcUser): EditForm => ({
+const toEditForm = (u: AdminUser): EditForm => ({
   firstName: u.firstName ?? '',
   lastName: u.lastName ?? '',
   email: u.email,
@@ -59,13 +55,10 @@ export default function AdminUsers() {
   const navigate = useNavigate()
 
   const isSuperAdmin = hasRole('super_admin')
-  const isTenantAdmin = hasRole('tenant_admin')
   const profile = user?.profile as Record<string, unknown> | undefined
-  const tenantId = (profile?.tenant_id as string) || ''
   const adminEmail = profile?.email as string || ''
 
-  const [users, setUsers] = useState<KcUser[]>([])
-  const [groupId, setGroupId] = useState<string | null>(null)
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -75,7 +68,7 @@ export default function AdminUsers() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
-  const [editTarget, setEditTarget] = useState<KcUser | null>(null)
+  const [editTarget, setEditTarget] = useState<AdminUser | null>(null)
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -83,32 +76,25 @@ export default function AdminUsers() {
   const loaded = useRef(false)
 
   // ── fetch ──────────────────────────────────────────────────────────────────
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     const token = getAccessToken()
     if (!token) return
     setLoading(true)
     setError(null)
     try {
-      if (isSuperAdmin) {
-        setUsers(await listAllUsers(token))
-      } else if (isTenantAdmin && tenantId) {
-        const group = await findTenantGroup(token, tenantId)
-        if (!group) throw new Error(`テナントグループ "${tenantId}" が見つかりません`)
-        setGroupId(group.id)
-        setUsers(await listGroupMembers(token, group.id))
-      }
+      setUsers(await listUsers(token))
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました')
     } finally {
       setLoading(false)
     }
-  }
+  }, [getAccessToken])
 
   useEffect(() => {
     if (loaded.current) return
     loaded.current = true
     fetchUsers()
-  }, [])
+  }, [fetchUsers])
 
   // ── create ─────────────────────────────────────────────────────────────────
   const handleCreate = async () => {
@@ -121,19 +107,14 @@ export default function AdminUsers() {
     setCreating(true)
     setCreateError(null)
     try {
-      const tid = isSuperAdmin ? (tenantId || 'acme-corp') : tenantId
-      const input: CreateUserInput = { ...createForm, tenantId: tid }
-      const userId = await createUser(token, input)
-
-      // テナントグループに追加
-      const gid = groupId ?? (await findTenantGroup(token, tid))?.id
-      if (gid && userId) await addUserToGroup(token, userId, gid)
-
-      // defaultRolesで自動付与されるが、明示的にも試みる
-      if (userId) {
-        await assignRealmRole(token, userId, 'user').catch(() => {})
+      const input: CreateUserInput = {
+        email: createForm.email,
+        firstName: createForm.firstName || undefined,
+        lastName: createForm.lastName || undefined,
+        password: createForm.password,
+        temporary: createForm.temporary,
       }
-
+      await createUser(token, input)
       setShowCreate(false)
       setCreateForm(emptyCreate())
       await fetchUsers()
@@ -145,7 +126,7 @@ export default function AdminUsers() {
   }
 
   // ── edit ───────────────────────────────────────────────────────────────────
-  const openEdit = (u: KcUser) => {
+  const openEdit = (u: AdminUser) => {
     setEditTarget(u)
     setEditForm(toEditForm(u))
     setEditError(null)
@@ -166,7 +147,7 @@ export default function AdminUsers() {
       await updateUser(token, editTarget.id, upd)
 
       if (editForm.resetPassword && editForm.newPassword) {
-        await resetUserPassword(token, editTarget.id, editForm.newPassword, true)
+        await resetPassword(token, editTarget.id, editForm.newPassword, true)
       }
 
       setEditTarget(null)
@@ -180,11 +161,15 @@ export default function AdminUsers() {
   }
 
   // ── toggle enabled ─────────────────────────────────────────────────────────
-  const toggleEnabled = async (u: KcUser) => {
+  const toggleEnabled = async (u: AdminUser) => {
     const token = getAccessToken()
     if (!token) return
     try {
-      await setUserEnabled(token, u.id, !u.enabled)
+      if (u.enabled) {
+        await disableUser(token, u.id)
+      } else {
+        await updateUser(token, u.id, { enabled: true })
+      }
       setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, enabled: !u.enabled } : x))
     } catch {
       alert('ステータス変更に失敗しました')
@@ -225,9 +210,9 @@ export default function AdminUsers() {
             </button>
             <h1 style={{ margin: 0, flex: 1 }}>
               👥 ユーザー管理
-              {!isSuperAdmin && tenantId && (
+              {isSuperAdmin && (
                 <span style={{ fontSize: '0.875rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                  — テナント: {tenantId}
+                  — 全テナント
                 </span>
               )}
             </h1>

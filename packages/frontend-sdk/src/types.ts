@@ -7,8 +7,6 @@ export interface AuthConfig {
   postLogoutRedirectUri?: string;
   scope?: string;
   automaticSilentRenew?: boolean;
-  /** Keycloak admin console base URL. Defaults to derived from authority. e.g. http://localhost:8080 */
-  keycloakBaseUrl?: string;
 }
 
 export interface AuthContextValue {
@@ -26,7 +24,6 @@ export interface AuthContextValue {
 
   getAccessToken: () => string | null;
   hasRole: (role: string) => boolean;
-  openUserManagement: () => void;
 }
 
 export interface AuthProviderProps extends AuthConfig {

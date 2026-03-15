@@ -2,6 +2,7 @@
   "realm": "common-auth",
   "displayName": "Common Auth",
   "displayNameHtml": "<div class=\"kc-logo-text\"><span>Common Auth</span></div>",
+  "loginTheme": "common-auth",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,

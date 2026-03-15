@@ -16,7 +16,6 @@ const createMockContext = (overrides: Partial<AuthContextValue> = {}): AuthConte
   getAccessToken: jest.fn(),
   handleCallback: jest.fn(),
   hasRole: jest.fn().mockReturnValue(false),
-  openUserManagement: jest.fn(),
   ...overrides,
 });
 

@@ -18,7 +18,6 @@ export function AuthProvider({
   postLogoutRedirectUri,
   scope = "openid profile email",
   automaticSilentRenew = true,
-  keycloakBaseUrl,
   children,
 }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
@@ -127,14 +126,6 @@ export function AuthProvider({
     [user]
   );
 
-  const openUserManagement = useCallback(() => {
-    const realmsParts = authority.split("/realms/");
-    const baseUrl = keycloakBaseUrl ?? (realmsParts.length >= 2 ? realmsParts[0] : authority);
-    const realm = realmsParts.length >= 2 ? realmsParts[1] : "master";
-    const managementUrl = `${baseUrl}/admin/${realm}/console/#/users`;
-    window.open(managementUrl, "_blank", "noopener,noreferrer");
-  }, [authority, keycloakBaseUrl]);
-
   const handleCallback = useCallback(async () => {
     try {
       setError(null);
@@ -160,9 +151,8 @@ export function AuthProvider({
       handleCallback,
       getAccessToken,
       hasRole,
-      openUserManagement,
     }),
-    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, handleCallback, getAccessToken, hasRole, openUserManagement]
+    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, handleCallback, getAccessToken, hasRole]
   );
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

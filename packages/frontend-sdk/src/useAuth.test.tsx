@@ -16,7 +16,6 @@ const mockContextValue: AuthContextValue = {
   handleCallback: jest.fn(),
   getAccessToken: jest.fn(),
   hasRole: jest.fn(),
-  openUserManagement: jest.fn(),
 };
 
 describe("useAuth", () => {
