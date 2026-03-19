@@ -1,0 +1,23 @@
+{
+  // Markdown・プレーンテキストでもスニペット補完を有効化
+  "[markdown]": {
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": false
+    },
+    "editor.snippetSuggestions": "top",
+    "editor.suggestOnTriggerCharacters": true
+  },
+  "[plaintext]": {
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": false
+    },
+    "editor.snippetSuggestions": "top",
+    "editor.suggestOnTriggerCharacters": true
+  },
+  // スニペットを補完リストの先頭に表示
+  "editor.snippetSuggestions": "top"
+}
