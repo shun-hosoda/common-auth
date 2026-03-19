@@ -85,19 +85,51 @@ packages/frontend-sdk/src/
 ├── types.ts           # 型定義
 ├── AuthContext.ts     # React Context
 ├── AuthProvider.tsx   # Provider + UserManager
+│                      # ⚠️ extractRealmRoles() はアクセストークン優先で読む
+│                      #    (Keycloak が ID token にロールを含めない設定の場合の防衛)
 ├── useAuth.ts         # Main Hook
 ├── AuthGuard.tsx      # Route Guard
 └── *.test.tsx         # テスト (8件)
 ```
 
+## Example App 構成
+
+```
+examples/react-app/
+├── package.json       # predev: SDK自動ビルド + Viteキャッシュクリア
+├── src/
+│   ├── pages/Dashboard.tsx    # SideNav付きアプリシェル
+│   ├── pages/AdminUsers.tsx   # 管理画面 (CRUD + MFAリセット)
+│   └── api/adminApi.ts        # Backend Admin API クライアント
+
+examples/fastapi-app/
+└── main.py            # FastAPI + Backend SDK (port 8000)
+```
+
+## Keycloak 設定の注意点
+
+```
+auth-stack/keycloak/
+├── realm-export.json
+│   ├── smtpServer.host = "mailhog"  ← #{SMTP_HOST} プレースホルダーではない
+│   └── roles scope mappers
+│       ├── realm roles: id.token.claim = "true"  ← 必須
+│       └── client roles: id.token.claim = "true" ← 必須
+└── themes/common-auth/login/theme.properties
+    └── import=common の行 ← 含めると500エラー発生 (削除済み)
+```
+
+⚠️ `docker-compose down -v` 後は CLAUDE.md の P1・P2 セルフチェックを実行すること。
+
 ## 次のタスク
 
-Phase 3: ユーザー管理 + Keycloak Themes
-1. Backend Admin API（Keycloak Admin REST APIプロキシ）
-2. Reactユーザー管理画面
-3. Keycloakログインテーマ（CSS変数ベース）
-4. テナント境界チェック強化
+Phase 3: 完了状態
+- ✅ Backend Admin API（Keycloak Admin REST APIプロキシ）
+- ✅ Reactユーザー管理画面（CRUD + MFAリセット + Dashboard統一レイアウト）
+- ✅ Keycloakログインテーマ（CSS変数ベース）
+- ✅ テナント境界チェック強化
+- ✅ ロール判定バグ修正（realm roles mapper + AuthProvider アクセストークン対応）
 
 ---
 
-*最終更新: 2026-03-01*
+*最終更新: 2026-03-20*

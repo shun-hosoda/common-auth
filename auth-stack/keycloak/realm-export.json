@@ -187,6 +187,7 @@
           "consentRequired": false,
           "config": {
             "user.attribute": "foo",
+            "id.token.claim": "true",
             "access.token.claim": "true",
             "claim.name": "realm_access.roles",
             "jsonType.label": "String",
@@ -200,6 +201,7 @@
           "consentRequired": false,
           "config": {
             "user.attribute": "foo",
+            "id.token.claim": "true",
             "access.token.claim": "true",
             "claim.name": "resource_access.${client_id}.roles",
             "jsonType.label": "String",
@@ -506,15 +508,13 @@
     }
   ],
   "smtpServer": {
-    "host": "#{SMTP_HOST}",
-    "port": "#{SMTP_PORT}",
-    "from": "#{SMTP_FROM}",
-    "fromDisplayName": "#{SMTP_FROM_DISPLAY_NAME}",
-    "auth": true,
-    "user": "#{SMTP_USER}",
-    "password": "#{SMTP_PASSWORD}",
-    "starttls": "#{SMTP_STARTTLS}",
-    "ssl": "#{SMTP_SSL}"
+    "host": "mailhog",
+    "port": "1025",
+    "from": "noreply@example.com",
+    "fromDisplayName": "Common Auth",
+    "auth": "false",
+    "ssl": "false",
+    "starttls": "false"
   },
   "internationalizationEnabled": false,
   "supportedLocales": ["en"],

@@ -198,3 +198,153 @@ Level 3: 詳細レビュー（5人専門家、重要な変更時のみ）
 # リント: npm run lint / ruff check . / golangci-lint run
 # ビルド: npm run build / python -m build / go build ./...
 ```
+
+---
+
+## 🔥 既知の落とし穴（AIが最初に読むこと）
+
+このプロジェクトで過去に繰り返し発生したバグ一覧。
+**症状と一致したら、診断コマンドを実行して即自己解決すること。**
+
+---
+
+### P1: `hasRole('tenant_admin')` が常に false を返す
+
+**症状**: `admin_*@example.com` でログインしても管理画面に遷移できない / SideNav にユーザー管理が表示されない
+
+**根本原因**: Keycloak の `roles` クライアントスコープの `realm roles` マッパーで `id.token.claim` が `false`（未設定）。
+`oidc-client-ts` の `user.profile` は IDトークン由来なのでロールが空になる。
+
+**診断コマンド**:
+```powershell
+$t = (Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/realms/master/protocol/openid-connect/token' -Body @{grant_type='password';client_id='admin-cli';username='admin';password='admin'}).access_token
+$sc = (Invoke-RestMethod -Uri 'http://localhost:8080/admin/realms/common-auth/client-scopes' -Headers @{Authorization="Bearer $t"}) | Where-Object { $_.name -eq 'roles' }
+$mp = Invoke-RestMethod -Uri "http://localhost:8080/admin/realms/common-auth/client-scopes/$($sc.id)/protocol-mappers/models" -Headers @{Authorization="Bearer $t"}
+$mp | ForEach-Object { "$($_.name): id.token=$($_.config.'id.token.claim')" }
+# ✅ 正常: realm roles: id.token=true
+# ❌ 異常: realm roles: id.token= (空)
+```
+
+**自己修正コマンド**:
+```powershell
+# 上記の $t, $sc, $mp を取得済みの前提
+$rm = $mp | Where-Object { $_.name -eq 'realm roles' }
+$rm.config | Add-Member -MemberType NoteProperty -Name 'id.token.claim' -Value 'true' -Force
+Invoke-RestMethod -Method Put -Uri "http://localhost:8080/admin/realms/common-auth/client-scopes/$($sc.id)/protocol-mappers/models/$($rm.id)" -Headers @{Authorization="Bearer $t"; 'Content-Type'='application/json'} -Body ($rm | ConvertTo-Json -Depth 10)
+$cm = $mp | Where-Object { $_.name -eq 'client roles' }
+$cm.config | Add-Member -MemberType NoteProperty -Name 'id.token.claim' -Value 'true' -Force
+Invoke-RestMethod -Method Put -Uri "http://localhost:8080/admin/realms/common-auth/client-scopes/$($sc.id)/protocol-mappers/models/$($cm.id)" -Headers @{Authorization="Bearer $t"; 'Content-Type'='application/json'} -Body ($cm | ConvertTo-Json -Depth 10)
+Write-Host 'Fixed. ブラウザで再ログインしてください。'
+```
+
+**恒久対策済み**:
+- `auth-stack/keycloak/realm-export.json` の `realm roles` / `client roles` マッパーに `"id.token.claim": "true"` を追加済み
+- `packages/frontend-sdk/src/AuthProvider.tsx` の `extractRealmRoles()` がアクセストークンを優先して読むよう修正済み（二重防御）
+
+---
+
+### P2: パスワードリセットメールが届かない
+
+**症状**: Keycloak のパスワードリセットを実行しても MailHog に何も届かない
+
+**根本原因**: `realm-export.json` の SMTP 設定に `"#{SMTP_HOST}"` というリテラル文字列（プレースホルダー未展開）が入っていた。
+`docker-compose down -v` + 再起動でこの設定が再インポートされると再発する。
+
+**診断コマンド**:
+```powershell
+$t = (Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/realms/master/protocol/openid-connect/token' -Body @{grant_type='password';client_id='admin-cli';username='admin';password='admin'}).access_token
+$realm = Invoke-RestMethod -Uri 'http://localhost:8080/admin/realms/common-auth' -Headers @{Authorization="Bearer $t"}
+$realm.smtpServer | ConvertTo-Json
+# ✅ 正常: "host": "mailhog", "port": "1025"
+# ❌ 異常: "host": "#{SMTP_HOST}" または空
+```
+
+**自己修正コマンド**:
+```powershell
+$body = @{smtpServer=@{host='mailhog';port='1025';from='noreply@example.com';fromDisplayName='Common Auth';auth='false';ssl='false';starttls='false'}} | ConvertTo-Json
+Invoke-RestMethod -Method Put -Uri 'http://localhost:8080/admin/realms/common-auth' -Headers @{Authorization="Bearer $t"; 'Content-Type'='application/json'} -Body $body
+Write-Host 'Fixed. Keycloak再起動不要。'
+```
+
+**恒久対策済み**: `auth-stack/keycloak/realm-export.json` の `smtpServer` を `mailhog:1025` に修正済み。
+
+---
+
+### P3: SDK変更がブラウザに反映されない
+
+**症状**: `packages/frontend-sdk/src/` を編集してもブラウザの動作が変わらない
+
+**根本原因**: `npm run dev`（Vite）はローカルパッケージを自動ビルドしない。
+かつ `node_modules/.vite` キャッシュが古いビルドを保持する。
+
+**診断確認**:
+```powershell
+# dist が src より古い = ビルド未実施
+Get-Item packages/frontend-sdk/dist/index.mjs | Select-Object LastWriteTime
+Get-Item packages/frontend-sdk/src/AuthProvider.tsx | Select-Object LastWriteTime
+```
+
+**自己修正コマンド**:
+```powershell
+Set-Location packages/frontend-sdk; npm run build
+Set-Location ../../examples/react-app; Remove-Item -Recurse -Force node_modules/.vite
+npm run dev
+```
+
+**恒久対策済み**: `examples/react-app/package.json` の `predev` スクリプトが SDK ビルド + Vite キャッシュクリアを自動実行。
+`npm run dev` 1コマンドで常に最新状態が起動する。
+
+---
+
+### P4: Keycloak ログイン失敗時に HTTP 500（error ID表示）
+
+**症状**: 誤ったパスワード入力などでログインが失敗すると、エラーメッセージでなく `Error ID xxxxxxxx` が表示される
+
+**根本原因**: カスタムテーマの `theme.properties` に `import=common` があると
+`FreeMarkerLoginFormsProvider.createErrorPage` で `ArrayIndexOutOfBoundsException` が発生する。
+
+**診断確認**:
+```powershell
+Get-Content auth-stack/keycloak/themes/common-auth/login/theme.properties
+# ❌ 異常: import=common が存在する
+# ✅ 正常: import=common が存在しない
+```
+
+**自己修正**: `auth-stack/keycloak/themes/common-auth/login/theme.properties` から `import=common` 行を削除し、Keycloakコンテナのみ再起動（ボリューム削除不要）:
+```powershell
+docker restart common-auth-keycloak
+```
+
+**恒久対策済み**: `theme.properties` から `import=common` を削除済み。
+
+---
+
+### P5: Docker ヘルスチェックが `unhealthy` と表示される（Windows）
+
+**症状**: `docker ps` で Keycloak が `unhealthy` と表示されるが、実際には起動している
+
+**根本原因**: Windows の Docker Desktop ではシェル互換性の問題でヘルスチェックコマンドが失敗する。偽陽性。
+
+**確認コマンド**:
+```powershell
+Invoke-WebRequest -Uri http://localhost:8080/health/ready -UseBasicParsing | Select-Object StatusCode
+# 200 なら正常稼働中（unhealthy 表示は無視してよい）
+```
+
+---
+
+### 起動前セルフチェックリスト
+
+作業開始時に以下を確認すること:
+
+```
+[ ] docker ps → 4コンテナ(keycloak, keycloak-db, app-db, mailhog)が起動中
+[ ] curl http://localhost:8080/health/ready → HTTP 200
+[ ] http://localhost:8025 → MailHog UI 表示
+[ ] realm roles マッパーの id.token.claim = true (P1診断コマンドで確認)
+[ ] SMTP host = mailhog (P2診断コマンドで確認)
+[ ] examples/fastapi-app/.env が存在する
+[ ] examples/react-app/.env が存在する
+```
+
+`docker-compose down -v` 後に再起動した場合は **P1・P2 を必ず再診断すること**。

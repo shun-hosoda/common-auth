@@ -10,7 +10,24 @@ import {
   updateUser,
   disableUser,
   resetPassword,
+  resetMfa,
 } from '../api/adminApi'
+
+// ─── Design tokens ──────────────────────────────────────────────────────────
+const tk = {
+  primary:     '#2563eb',
+  bg:          '#f8fafc',
+  surface:     '#ffffff',
+  border:      '#e2e8f0',
+  text:        '#1e293b',
+  textMuted:   '#64748b',
+  textInverse: '#ffffff',
+  radiusMd:    '8px',
+  radiusLg:    '12px',
+  radiusFull:  '9999px',
+  shadowSm:    '0 1px 2px 0 rgb(0 0 0 / 0.06)',
+  shadowMd:    '0 4px 12px 0 rgb(0 0 0 / 0.10)',
+}
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
@@ -21,9 +38,14 @@ const overlay: React.CSSProperties = {
   zIndex: 1000,
 }
 const modalBox: React.CSSProperties = {
-  background: '#fff', borderRadius: 12, padding: '2rem',
+  background: tk.surface, borderRadius: 12, padding: '2rem',
   width: '100%', maxWidth: 480,
-  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+  boxShadow: tk.shadowMd,
+}
+const mfaModalBox: React.CSSProperties = {
+  background: tk.surface, borderRadius: 12, padding: '2rem',
+  width: '100%', maxWidth: 400,
+  boxShadow: tk.shadowMd,
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,9 +76,16 @@ export default function AdminUsers() {
   const { user, logout, hasRole, getAccessToken } = useAuth()
   const navigate = useNavigate()
 
-  const isSuperAdmin = hasRole('super_admin')
-  const profile = user?.profile as Record<string, unknown> | undefined
-  const adminEmail = profile?.email as string || ''
+  const isSuperAdmin  = hasRole('super_admin')
+  const isTenantAdmin = hasRole('tenant_admin')
+  const isAdmin       = isSuperAdmin || isTenantAdmin
+  const profile       = user?.profile as Record<string, unknown> | undefined
+  const adminEmail    = profile?.email as string | undefined ?? ''
+  const adminInitial  = adminEmail.charAt(0).toUpperCase() || '?'
+
+  const rawTenantId = profile?.tenant_id
+  const tenantName  = Array.isArray(rawTenantId) ? rawTenantId[0] : (rawTenantId as string | undefined) ?? ''
+  const tenantTitle = tenantName || (isSuperAdmin ? '全テナント管理' : 'Common Auth')
 
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +101,9 @@ export default function AdminUsers() {
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const [mfaTarget,  setMfaTarget]  = useState<AdminUser | null>(null)
+  const [mfaLoading, setMfaLoading] = useState(false)
 
   const loaded = useRef(false)
 
@@ -160,6 +192,22 @@ export default function AdminUsers() {
     }
   }
 
+  // ── MFA reset ──────────────────────────────────────────────────────────────
+  const handleMfaReset = async () => {
+    if (!mfaTarget) return
+    const token = getAccessToken()
+    if (!token) return
+    setMfaLoading(true)
+    try {
+      await resetMfa(token, mfaTarget.id)
+      setMfaTarget(null)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'MFAリセットに失敗しました')
+    } finally {
+      setMfaLoading(false)
+    }
+  }
+
   // ── toggle enabled ─────────────────────────────────────────────────────────
   const toggleEnabled = async (u: AdminUser) => {
     const token = getAccessToken()
@@ -187,124 +235,175 @@ export default function AdminUsers() {
   })
 
   // ─── render ────────────────────────────────────────────────────────────────
-  return (
-    <div>
-      {/* Nav */}
-      <nav className="nav">
-        <div className="nav-brand">🔐 Common Auth</div>
-        <div className="user-info">
-          <span>{adminEmail}</span>
-          <button className="btn btn-secondary" onClick={logout} style={{ fontSize: '0.875rem', padding: '0.4rem 0.8rem' }}>
-            ログアウト
-          </button>
-        </div>
-      </nav>
+  const navItems = [
+    { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
+    ...(isAdmin      ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
+    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
+  ]
 
-      <div className="container">
-        {/* Header */}
-        <div className="section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => navigate('/dashboard')}
-              style={{ fontSize: '0.875rem', padding: '0.4rem 0.8rem' }}>
-              ← ダッシュボード
-            </button>
-            <h1 style={{ margin: 0, flex: 1 }}>
+  return (
+    <div style={{ minHeight: '100vh', background: tk.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+
+      {/* ── TopBar ── */}
+      <header style={{
+        height: 60, background: tk.surface,
+        borderBottom: `1px solid ${tk.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 16px', position: 'sticky', top: 0, zIndex: 100,
+        boxShadow: tk.shadowSm,
+      }}>
+        <span style={{ fontSize: '1rem', fontWeight: 700, color: tk.text }}>{tenantTitle}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: tk.radiusFull,
+            background: tk.primary, color: tk.textInverse,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: '0.875rem',
+          }}>
+            {adminInitial}
+          </div>
+          <span style={{ fontSize: '0.875rem', color: tk.text, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {adminEmail}
+          </span>
+          <button onClick={logout} style={{
+            padding: '6px 12px', borderRadius: tk.radiusMd,
+            background: 'none', border: `1px solid ${tk.border}`,
+            fontSize: '0.8rem', cursor: 'pointer', color: tk.text,
+          }}>ログアウト</button>
+        </div>
+      </header>
+
+      {/* ── Body ── */}
+      <div style={{ display: 'flex' }}>
+
+        {/* SideNav */}
+        <nav aria-label="サイドメニュー" style={{
+          width: 220, flexShrink: 0,
+          background: tk.surface, borderRight: `1px solid ${tk.border}`,
+          padding: '16px 8px', minHeight: 'calc(100vh - 60px)',
+        }}>
+          {navItems.map(item => {
+            const active = item.path === '/admin/users'
+            return (
+              <button key={item.path} onClick={() => navigate(item.path)}
+                aria-current={active ? 'page' : undefined}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px', borderRadius: tk.radiusMd,
+                  background: active ? '#dbeafe' : 'none',
+                  color: active ? tk.primary : tk.text,
+                  border: 'none', cursor: 'pointer', textAlign: 'left',
+                  fontSize: '0.875rem', fontWeight: active ? 600 : 400,
+                  marginBottom: 2, minHeight: 44,
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: '1rem' }}>{item.icon}</span>
+                {item.label}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Main */}
+        <main style={{ flex: 1, minWidth: 0, padding: '24px' }}>
+
+          {/* Page header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: tk.text, flex: 1 }}>
               👥 ユーザー管理
               {isSuperAdmin && (
-                <span style={{ fontSize: '0.875rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 400, color: tk.textMuted, marginLeft: '0.5rem' }}>
                   — 全テナント
                 </span>
               )}
             </h1>
-            <button className="btn btn-primary" onClick={() => { setCreateForm(emptyCreate()); setCreateError(null); setShowCreate(true) }}>
+            <button
+              onClick={() => { setCreateForm(emptyCreate()); setCreateError(null); setShowCreate(true) }}
+              style={{
+                padding: '8px 16px', borderRadius: tk.radiusMd,
+                background: tk.primary, color: tk.textInverse,
+                border: 'none', cursor: 'pointer',
+                fontSize: '0.875rem', fontWeight: 600,
+              }}
+            >
               + ユーザー追加
             </button>
           </div>
-        </div>
 
-        {/* Search */}
-        <div className="section">
+          {/* Search */}
           <input
             type="text"
             placeholder="名前・メールで検索..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
-              width: '100%', padding: '0.625rem 1rem',
-              border: '1px solid var(--border)', borderRadius: 8,
-              fontSize: '1rem', boxSizing: 'border-box',
+              width: '100%', padding: '8px 12px',
+              border: `1px solid ${tk.border}`, borderRadius: tk.radiusMd,
+              fontSize: '0.9rem', boxSizing: 'border-box',
+              marginBottom: '16px', outline: 'none',
             }}
           />
-        </div>
-
-        {/* Table */}
-        <div className="section">
+          {/* Table */}
           {loading ? (
-            <div className="loading" style={{ height: 200 }}>読み込み中...</div>
+            <div style={{ textAlign: 'center', padding: '3rem', color: tk.textMuted }}>読み込み中...</div>
           ) : error ? (
-            <div className="card" style={{ color: 'var(--danger)' }}>
+            <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '1rem', borderRadius: tk.radiusMd, display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <strong>エラー:</strong> {error}
-              <button className="btn btn-secondary" onClick={fetchUsers} style={{ marginLeft: '1rem', fontSize: '0.875rem', padding: '0.3rem 0.6rem' }}>
+              <button onClick={fetchUsers} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #b91c1c', background: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: '0.8rem' }}>
                 再試行
               </button>
             </div>
           ) : (
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ background: tk.surface, border: `1px solid ${tk.border}`, borderRadius: tk.radiusLg, overflow: 'hidden', boxShadow: tk.shadowSm }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
+                  <tr style={{ background: tk.bg }}>
                     {['ユーザー', 'メール', 'テナント', 'ステータス', '操作'].map((h) => (
-                      <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: tk.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: `1px solid ${tk.border}` }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>ユーザーが見つかりません</td></tr>
-                  ) : filtered.map((u) => {
+                    <tr><td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: tk.textMuted }}>ユーザーが見つかりません</td></tr>
+                  ) : filtered.map((u, idx) => {
                     const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username
                     const initial = name.charAt(0).toUpperCase()
                     const tId = u.attributes?.tenant_id?.[0] ?? '—'
                     return (
-                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '0.875rem', flexShrink: 0 }}>
+                      <tr key={u.id} style={{ borderBottom: idx < filtered.length - 1 ? `1px solid ${tk.border}` : 'none' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: 36, height: 36, borderRadius: tk.radiusFull, background: tk.primary, color: tk.textInverse, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
                               {initial}
                             </div>
-                            <span style={{ fontWeight: 500 }}>{name}</span>
+                            <span style={{ fontWeight: 500, fontSize: '0.9rem', color: tk.text }}>{name}</span>
                           </div>
                         </td>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{u.email}</td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <code style={{ fontSize: '0.8rem', background: 'var(--bg)', padding: '0.2rem 0.4rem', borderRadius: 4 }}>{tId}</code>
+                        <td style={{ padding: '12px 16px', color: tk.textMuted, fontSize: '0.875rem' }}>{u.email}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <code style={{ fontSize: '0.78rem', background: tk.bg, padding: '2px 7px', borderRadius: 4, border: `1px solid ${tk.border}` }}>{tId}</code>
                         </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
+                        <td style={{ padding: '12px 16px' }}>
                           <span style={{
-                            display: 'inline-block', padding: '0.2rem 0.6rem', borderRadius: 9999,
+                            display: 'inline-block', padding: '3px 10px', borderRadius: tk.radiusFull,
                             fontSize: '0.75rem', fontWeight: 600,
                             background: u.enabled ? '#dcfce7' : '#fee2e2',
-                            color: u.enabled ? '#15803d' : '#b91c1c',
+                            color:      u.enabled ? '#15803d' : '#b91c1c',
                           }}>
                             {u.enabled ? '有効' : '無効'}
                           </span>
                         </td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <button className="btn btn-secondary" onClick={() => openEdit(u)}
-                              style={{ fontSize: '0.8rem', padding: '0.3rem 0.7rem' }}>
-                              編集
-                            </button>
-                            <button
-                              onClick={() => toggleEnabled(u)}
-                              style={{
-                                fontSize: '0.8rem', padding: '0.3rem 0.7rem',
-                                border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 500,
-                                background: u.enabled ? '#fee2e2' : '#dcfce7',
-                                color: u.enabled ? '#b91c1c' : '#15803d',
-                              }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {/* 編集 */}
+                            <button onClick={() => openEdit(u)} style={{ padding: '4px 10px', borderRadius: tk.radiusMd, border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, background: tk.bg, color: tk.text }}>編集</button>
+                            {/* 有効/無効 */}
+                            <button onClick={() => toggleEnabled(u)} style={{ padding: '4px 10px', borderRadius: tk.radiusMd, border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, background: u.enabled ? '#fee2e2' : '#dcfce7', color: u.enabled ? '#b91c1c' : '#15803d' }}>
                               {u.enabled ? '無効化' : '有効化'}
                             </button>
+                            {/* MFA リセット */}
+                            <button onClick={() => setMfaTarget(u)} style={{ padding: '4px 10px', borderRadius: tk.radiusMd, border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, background: '#fef3c7', color: '#92400e' }}>MFAリセット</button>
                           </div>
                         </td>
                       </tr>
@@ -312,13 +411,40 @@ export default function AdminUsers() {
                   })}
                 </tbody>
               </table>
-              <div style={{ padding: '0.5rem 1rem', borderTop: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <div style={{ padding: '8px 16px', borderTop: `1px solid ${tk.border}`, fontSize: '0.78rem', color: tk.textMuted }}>
                 {filtered.length} 件 / 全 {users.length} 件
               </div>
             </div>
           )}
-        </div>
+        </main>
       </div>
+
+      {/* ── MFA Reset Confirm Modal ─────────────────────────────────────────── */}
+      {mfaTarget && (
+        <div style={overlay} onClick={(e) => { if (e.target === e.currentTarget && !mfaLoading) setMfaTarget(null) }}>
+          <div style={mfaModalBox}>
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔐</div>
+              <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>MFA 設定をリセット</h2>
+              <p style={{ margin: 0, color: tk.textMuted, fontSize: '0.875rem', lineHeight: 1.6 }}>
+                <strong>{[mfaTarget.firstName, mfaTarget.lastName].filter(Boolean).join(' ') || mfaTarget.email}</strong> の
+                MFA（二要素認証）設定を削除します。<br />
+                次回ログイン時にMFAを再設定するよう求められます。
+              </p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button onClick={() => setMfaTarget(null)} disabled={mfaLoading}
+                style={{ padding: '8px 16px', borderRadius: tk.radiusMd, background: 'none', border: `1px solid ${tk.border}`, fontSize: '0.875rem', cursor: mfaLoading ? 'not-allowed' : 'pointer', color: tk.text, opacity: mfaLoading ? 0.5 : 1 }}>
+                キャンセル
+              </button>
+              <button onClick={handleMfaReset} disabled={mfaLoading}
+                style={{ padding: '8px 20px', borderRadius: tk.radiusMd, background: '#f59e0b', color: tk.textInverse, border: 'none', cursor: mfaLoading ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, opacity: mfaLoading ? 0.6 : 1 }}>
+                {mfaLoading ? 'リセット中...' : 'リセットする'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Create Modal ──────────────────────────────────────────────────── */}
       {showCreate && (
@@ -358,9 +484,11 @@ export default function AdminUsers() {
               </label>
               {createError && <div style={{ color: 'var(--danger)', fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>{createError}</div>}
             </div>
-            <div className="btn-group" style={{ marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => setShowCreate(false)} disabled={creating}>キャンセル</button>
-              <button className="btn btn-primary" onClick={handleCreate} disabled={creating}>
+            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button onClick={() => setShowCreate(false)} disabled={creating}
+                style={{ padding: '8px 16px', borderRadius: tk.radiusMd, background: 'none', border: `1px solid ${tk.border}`, fontSize: '0.875rem', cursor: creating ? 'not-allowed' : 'pointer', color: tk.text, opacity: creating ? 0.5 : 1 }}>キャンセル</button>
+              <button onClick={handleCreate} disabled={creating}
+                style={{ padding: '8px 20px', borderRadius: tk.radiusMd, background: tk.primary, color: tk.textInverse, border: 'none', cursor: creating ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, opacity: creating ? 0.6 : 1 }}>
                 {creating ? '作成中...' : '追加する'}
               </button>
             </div>
@@ -404,9 +532,11 @@ export default function AdminUsers() {
               </div>
               {editError && <div style={{ color: 'var(--danger)', fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>{editError}</div>}
             </div>
-            <div className="btn-group" style={{ marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => setEditTarget(null)} disabled={saving}>キャンセル</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button onClick={() => setEditTarget(null)} disabled={saving}
+                style={{ padding: '8px 16px', borderRadius: tk.radiusMd, background: 'none', border: `1px solid ${tk.border}`, fontSize: '0.875rem', cursor: saving ? 'not-allowed' : 'pointer', color: tk.text, opacity: saving ? 0.5 : 1 }}>キャンセル</button>
+              <button onClick={handleSave} disabled={saving}
+                style={{ padding: '8px 20px', borderRadius: tk.radiusMd, background: tk.primary, color: tk.textInverse, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, opacity: saving ? 0.6 : 1 }}>
                 {saving ? '保存中...' : '保存する'}
               </button>
             </div>

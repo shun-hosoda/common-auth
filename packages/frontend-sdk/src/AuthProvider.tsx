@@ -3,7 +3,30 @@ import { UserManager, User } from "oidc-client-ts";
 import { AuthContext } from "./AuthContext";
 import type { AuthProviderProps } from "./types";
 
-function extractRealmRoles(profile: User["profile"]): string[] {
+function extractRealmRoles(user: User): string[] {
+  // Access token を優先（Keycloak は realm_access を access token に付与するが ID token には付与しない場合がある）
+  const accessToken = user.access_token;
+  if (accessToken) {
+    try {
+      const parts = accessToken.split(".");
+      if (parts.length === 3) {
+        const payload = parts[1];
+        const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+        const decoded: unknown = JSON.parse(atob(padded));
+        if (decoded && typeof decoded === "object") {
+          const ra = (decoded as Record<string, unknown>).realm_access;
+          if (ra && typeof ra === "object") {
+            const roles = (ra as Record<string, unknown>).roles;
+            if (Array.isArray(roles)) return roles as string[];
+          }
+        }
+      }
+    } catch {
+      // fall through to ID token profile
+    }
+  }
+  // フォールバック: ID token の profile から試みる
+  const profile = user.profile;
   if (!profile || typeof profile !== "object") return [];
   const realmAccess = (profile as Record<string, unknown>).realm_access;
   if (!realmAccess || typeof realmAccess !== "object") return [];
@@ -121,7 +144,7 @@ export function AuthProvider({
   const hasRole = useCallback(
     (role: string): boolean => {
       if (!user) return false;
-      return extractRealmRoles(user.profile).includes(role);
+      return extractRealmRoles(user).includes(role);
     },
     [user]
   );
