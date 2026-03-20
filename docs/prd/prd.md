@@ -85,13 +85,125 @@
 | FR-026 | ロールベースUI制御 | Must | userロールはユーザー管理画面を表示しない |
 | FR-027 | Keycloak UIへの委譲 | Should | ユーザー一覧・登録・編集をKeycloak管理UIに遷移（カスタムテーマ対応可） |
 
-### 3.4 将来的な拡張（Phase 4+）
+### 3.4 Phase 3.5: テナントMFAポリシー管理
+
+#### 3.4.1 概要
+
+テナント管理者（`tenant_admin`）が自テナント全体のMFA（多要素認証）の有効/無効およびMFA方式を管理画面から設定できるようにする。サイドナビに「セキュリティ設定」画面を追加し、将来的なセキュリティポリシー拡張の受け皿とする。
+
+#### 3.4.2 ユーザーストーリー
+
+| # | ペルソナ | ストーリー | 受入条件 |
+|---|---------|-----------|---------|
+| US-1 | テナント管理者 | セキュリティ設定画面でテナント全体のMFAを有効にしたい | トグルONでテナント配下の全ユーザーの次回ログインからMFAが要求される |
+| US-2 | テナント管理者 | MFA方式をTOTPまたはメールOTPから選択したい | ラジオボタンで方式を選択し保存できる。方式変更時は既存のMFAクレデンシャルがリセットされる旨の確認ダイアログが表示される |
+| US-3 | テナント管理者 | MFAを無効にして全ユーザーのMFA要求を解除したい | トグルOFFでMFA要求が解除される。既存のMFAクレデンシャルは保持（再有効化時に再利用可能） |
+| US-4 | エンドユーザー | MFA有効テナントにログインした際、指定された方式でMFA設定を求められたい | 初回: MFA登録フロー → 2回目以降: MFAコード入力 |
+| US-5 | 一般ユーザー | セキュリティ設定画面にアクセスできないこと | `user`ロールではサイドナビに「セキュリティ設定」が表示されない |
+| US-6 | エンドユーザー | ダッシュボードで自分のMFA設定状態を確認し、必要に応じてMFA設定を変更したい | MFAステータスカードが表示され、Keycloak Account Consoleへ遷移してMFA管理が可能 |
+
+#### 3.4.3 機能要件
+
+| ID | 機能 | 優先度 | 説明 |
+|----|------|--------|------|
+| FR-030 | セキュリティ設定画面 | Must | `tenant_admin`のみアクセス可能。サイドナビに「セキュリティ設定」として追加 |
+| FR-031 | MFA有効/無効トグル | Must | テナント全体のMFA強制をON/OFFするトグルスイッチ |
+| FR-032 | MFA方式選択 | Must | TOTP（認証アプリ）またはメールOTPのいずれかを選択。ラジオボタンUI |
+| FR-033 | MFA設定取得API | Must | `GET /api/admin/security/mfa` — 現在のMFA設定を返す |
+| FR-034 | MFA設定更新API | Must | `PUT /api/admin/security/mfa` — MFA有効/無効・方式を更新 |
+| FR-035 | 方式変更時の確認 | Must | MFA方式を変更する場合、既存クレデンシャルリセットの確認ダイアログ表示 |
+| FR-036 | MFA強制ログインフロー | Must | MFA有効テナントのユーザーログイン時にKeycloak認証フローでMFAを要求 |
+| FR-037 | MFA設定の永続化 | Must | MFA設定をKeycloakグループ属性（`mfa_enabled`, `mfa_method`）として保存 |
+
+#### 3.4.4 画面仕様
+
+```
+/security — セキュリティ設定画面（tenant_adminのみ）
+┌─────────────────────────────────────────────┐
+│ [SideNav]  │  セキュリティ設定               │
+│            │                                 │
+│ ダッシュボード │  ┌─ MFA（多要素認証）──────┐  │
+│ ユーザー管理  │  │                          │  │
+│ ★セキュリティ │  │  MFA を有効にする [●ON]  │  │
+│ 設定        │  │                          │  │
+│            │  │  MFA方式:                 │  │
+│            │  │  ○ TOTP（認証アプリ）     │  │
+│            │  │    Google Authenticator等  │  │
+│            │  │  ○ メールOTP             │  │
+│            │  │    ログイン時にメールで     │  │
+│            │  │    ワンタイムコードを送信   │  │
+│            │  │                          │  │
+│            │  │  [保存]                   │  │
+│            │  └──────────────────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+#### 3.4.5 API仕様
+
+**GET /api/admin/security/mfa**
+
+レスポンス:
+```json
+{
+  "mfa_enabled": true,
+  "mfa_method": "totp"
+}
+```
+
+| フィールド | 型 | 説明 |
+|-----------|------|------|
+| `mfa_enabled` | boolean | MFA強制の有効/無効 |
+| `mfa_method` | string | `"totp"` または `"email"` |
+
+**PUT /api/admin/security/mfa**
+
+リクエスト:
+```json
+{
+  "mfa_enabled": true,
+  "mfa_method": "email"
+}
+```
+
+レスポンス: `200 OK`
+```json
+{
+  "status": "updated",
+  "mfa_enabled": true,
+  "mfa_method": "email"
+}
+```
+
+#### 3.4.6 技術方針
+
+| 項目 | 方針 |
+|------|------|
+| MFA設定の保存先 | Keycloakグループ属性（`mfa_enabled`, `mfa_method`）。ADR-003の共有Realm+Groupsモデルに準拠 |
+| MFA強制の実現方法 | Keycloak認証フローのConditional OTP + グループ属性による条件分岐 |
+| TOTP | Keycloak標準OTP Authenticator。アルゴリズム: HMAC-SHA1 / 6桁 / 30秒 |
+| メールOTP | Keycloak v24標準Email OTP Authenticator。OTP有効期限: 5分 / 試行上限: 3回 |
+| 方式切替時 | 既存ユーザーのOTPクレデンシャルを一括リセット（Admin API経由）。次回ログインで新方式のMFA登録を促す |
+| 認証フロー構成 | `browser` → `Username/Password` → `Conditional OTP Subflow`（グループ属性で分岐） |
+| Backend API | `KeycloakAdminClient` にグループ属性のCRUDメソッドを追加 |
+| Frontend | 新規 `SecuritySettings.tsx` ページ。共有 `SideNav` に `NavItem` を追加 |
+
+#### 3.4.7 制約・注意事項
+
+- MFA方式の変更は即座に反映されるが、既にログイン済みのセッションには影響しない（次回ログインから適用）
+- メールOTPはKeycloak v24以降が必須（`realm-export.json` の `authenticationFlows` に Email OTP Authenticator が定義されていること）
+- テナント単位の認証フロー切替はKeycloakのConditional Authenticatorで実現する（Realm-level flow自体は1つ）
+- `super_admin` もセキュリティ設定画面にアクセス可能（全テナントの設定を閲覧・変更できる）
+
+### 3.5 将来的な拡張（Phase 4+）
 
 | ID | 機能 | 説明 |
 |----|------|------|
 | FT-001 | ソーシャルログイン | Google, Microsoft Entra ID連携（Keycloak設定変更のみ） |
 | FT-002 | クラウドマネージド移行 | AWS Cognito等への移行パス（OIDC準拠のため） |
 | FT-003 | 監査ログ | ログイン履歴、権限変更の記録・可視化 |
+| FT-004 | パスワードポリシー設定 | セキュリティ設定画面にパスワード強度・有効期限ポリシーを追加 |
+| FT-005 | セッションタイムアウト設定 | セキュリティ設定画面にセッション有効期限の設定を追加 |
+| FT-006 | 信頼済みデバイス（Cookie） | MFA認証後に信頼済みデバイスCookieを発行し、一定期間MFAをスキップ |
 
 ## 4. 非機能要件 (Non-Functional Requirements)
 
@@ -124,9 +236,11 @@
 
 | フェーズ | 内容 | 期限 |
 |----------|------|------|
-| Phase 1 | MVP: Auth Stack + Frontend/Backend SDK | TBD |
-| Phase 2 | MFA, パスワードリセット, セルフ登録 | TBD |
-| Phase 3 | ソーシャルログイン, 監査ログ | TBD |
+| Phase 1 | MVP: Auth Stack + Frontend/Backend SDK | ✅ 完了 |
+| Phase 2 | MFA, パスワードリセット, セルフ登録, Rate Limiting | ✅ 完了 |
+| Phase 3 | ユーザー管理UI, ロールベースアクセス制御, Keycloakテーマ | ✅ 完了 |
+| Phase 3.5 | テナントMFAポリシー管理（セキュリティ設定画面） | TBD |
+| Phase 4+ | ソーシャルログイン, 監査ログ, パスワードポリシー | TBD |
 
 ## 8. Definition of Done（完了条件）
 
