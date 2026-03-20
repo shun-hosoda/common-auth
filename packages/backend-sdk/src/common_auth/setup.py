@@ -66,4 +66,4 @@ def setup_auth(
     app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
     # Mount admin router (lazy — KeycloakAdminClient is created on first use)
-    app.include_router(admin_router, prefix="/admin", tags=["admin"])
+    app.include_router(admin_router, prefix="/api/admin", tags=["admin"])

@@ -88,7 +88,7 @@ def mock_kc() -> MagicMock:
 def app(mock_kc: MagicMock) -> FastAPI:
     """FastAPI app with admin router and injected mock."""
     _app = FastAPI()
-    _app.include_router(router, prefix="/admin")
+    _app.include_router(router, prefix="/api/admin")
 
     cfg = MagicMock()
     cfg.keycloak_url = "http://localhost:8080"
@@ -122,7 +122,7 @@ class TestListUsers:
     ) -> None:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
-            resp = c.get("/admin/users")
+            resp = c.get("/api/admin/users")
         assert resp.status_code == 200
         mock_kc.list_users.assert_called_once_with(tenant_id="acme-corp")
 
@@ -131,14 +131,14 @@ class TestListUsers:
     ) -> None:
         caller = _make_user(["super_admin"])
         with _client(app, caller) as c:
-            resp = c.get("/admin/users")
+            resp = c.get("/api/admin/users")
         assert resp.status_code == 200
         mock_kc.list_users.assert_called_once_with(tenant_id=None)
 
     def test_regular_user_is_forbidden(self, app: FastAPI) -> None:
         caller = _make_user(["user"])
         with _client(app, caller) as c:
-            resp = c.get("/admin/users")
+            resp = c.get("/api/admin/users")
         assert resp.status_code == 403
 
 
@@ -152,7 +152,7 @@ class TestCreateUser:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
             resp = c.post(
-                "/admin/users",
+                "/api/admin/users",
                 json={
                     "email": "new@acme-corp.com",
                     "firstName": "New",
@@ -172,7 +172,7 @@ class TestCreateUser:
         caller = _make_user(["user"])
         with _client(app, caller) as c:
             resp = c.post(
-                "/admin/users",
+                "/api/admin/users",
                 json={"email": "x@x.com", "password": "abc"},
             )
         assert resp.status_code == 403
@@ -187,7 +187,7 @@ class TestDisableUser:
     ) -> None:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
-            resp = c.delete("/admin/users/user-456")
+            resp = c.delete("/api/admin/users/user-456")
         assert resp.status_code == 200
         mock_kc.disable_user.assert_called_once_with("user-456")
 
@@ -197,7 +197,7 @@ class TestDisableUser:
         # Caller is from globex-inc, target is in acme-corp
         caller = _make_user(["tenant_admin"], tenant_id="globex-inc")
         with _client(app, caller) as c:
-            resp = c.delete("/admin/users/user-456")
+            resp = c.delete("/api/admin/users/user-456")
         assert resp.status_code == 403
         mock_kc.disable_user.assert_not_called()
 
@@ -214,7 +214,7 @@ class TestDisableUser:
             }
         )
         with _client(app, caller) as c:
-            resp = c.delete("/admin/users/caller-123")
+            resp = c.delete("/api/admin/users/caller-123")
         assert resp.status_code == 400
         mock_kc.disable_user.assert_not_called()
 
@@ -229,7 +229,7 @@ class TestResetPassword:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
             resp = c.post(
-                "/admin/users/user-456/reset-password",
+                "/api/admin/users/user-456/reset-password",
                 json={"newPassword": "N3wP@ss!", "temporary": True},
             )
         assert resp.status_code == 200
@@ -245,7 +245,7 @@ class TestResetMfa:
     ) -> None:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
-            resp = c.post("/admin/users/user-456/reset-mfa")
+            resp = c.post("/api/admin/users/user-456/reset-mfa")
         assert resp.status_code == 200
         mock_kc.reset_mfa.assert_called_once_with("user-456")
 
@@ -259,7 +259,7 @@ class TestListClients:
     ) -> None:
         caller = _make_user(["super_admin"])
         with _client(app, caller) as c:
-            resp = c.get("/admin/clients")
+            resp = c.get("/api/admin/clients")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
         assert resp.json()[0]["clientId"] == "acme-corp"
@@ -267,7 +267,7 @@ class TestListClients:
     def test_tenant_admin_is_forbidden(self, app: FastAPI) -> None:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
-            resp = c.get("/admin/clients")
+            resp = c.get("/api/admin/clients")
         assert resp.status_code == 403
 
 
@@ -281,7 +281,7 @@ class TestCreateClient:
         caller = _make_user(["super_admin"])
         with _client(app, caller) as c:
             resp = c.post(
-                "/admin/clients",
+                "/api/admin/clients",
                 json={"clientId": "new-tenant", "name": "New Tenant"},
             )
         assert resp.status_code == 201
@@ -291,7 +291,8 @@ class TestCreateClient:
         caller = _make_user(["tenant_admin"])
         with _client(app, caller) as c:
             resp = c.post(
-                "/admin/clients",
+                "/api/admin/clients",
                 json={"clientId": "evil-tenant"},
             )
         assert resp.status_code == 403
+

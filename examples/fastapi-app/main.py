@@ -1,5 +1,10 @@
 """Example FastAPI application using common-auth."""
 
+# ── Load .env BEFORE any imports that read os.environ ─────────────────────────
+from dotenv import load_dotenv  # noqa: E402  isort:skip
+load_dotenv()
+# ──────────────────────────────────────────────────────────────────────────────
+
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends

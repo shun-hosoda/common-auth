@@ -333,6 +333,54 @@ Invoke-WebRequest -Uri http://localhost:8080/health/ready -UseBasicParsing | Sel
 
 ---
 
+### P6: ユーザー管理画面（Admin API）が動作しない
+
+**症状**: React の管理画面でユーザー一覧が表示されない / ネットワークタブで `/api/admin/users` が 401・403・404・500 を返す
+
+**根本原因**: 複数の設定不備が連鎖的に発生する。
+
+| 段階 | エラー | 原因 |
+|------|--------|------|
+| 404 | `/api/admin/users` が見つからない | `setup.py` の admin router prefix と Vite proxy パスの不一致 |
+| 401 | `Audience doesn't match` | `KEYCLOAK_CLIENT_ID` が `backend-app` のままで `example-app` と不一致 / audience mapper 未設定 |
+| 500 | `Admin API not configured (KC_ADMIN_CLIENT_SECRET missing)` | `admin-api-client` が Keycloak に未作成 / `.env` に `KC_ADMIN_*` 未設定 / `load_dotenv()` 未呼出 |
+| 403 | Keycloak Admin API が Forbidden | `admin-api-client` の `defaultClientScopes` に `roles` が含まれていない |
+
+**診断コマンド**:
+```powershell
+# 1. Admin router のパスが正しいか
+$t = (Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/realms/common-auth/protocol/openid-connect/token' -Body @{grant_type='password';client_id='example-app';username='admin_acme-corp@example.com';password='admin123'}).access_token
+Invoke-RestMethod -Uri 'http://localhost:8000/api/admin/users' -Headers @{Authorization="Bearer $t"} -Method Get
+# ✅ 正常: ユーザー一覧 JSON が返る
+# ❌ 異常: 404/401/403/500
+
+# 2. audience mapper が設定されているか
+$at = (Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/realms/master/protocol/openid-connect/token' -Body @{grant_type='password';client_id='admin-cli';username='admin';password='admin'}).access_token
+$clients = Invoke-RestMethod -Uri 'http://localhost:8080/admin/realms/common-auth/clients' -Headers @{Authorization="Bearer $at"}
+$ea = $clients | Where-Object { $_.clientId -eq 'example-app' }
+$mappers = Invoke-RestMethod -Uri "http://localhost:8080/admin/realms/common-auth/clients/$($ea.id)/protocol-mappers/models" -Headers @{Authorization="Bearer $at"}
+$mappers | Where-Object { $_.protocolMapper -eq 'oidc-audience-mapper' } | Select-Object name
+# ✅ 正常: audience-mapper が存在する
+# ❌ 異常: 空
+
+# 3. admin-api-client が存在し、roles スコープを持つか
+$aac = $clients | Where-Object { $_.clientId -eq 'admin-api-client' }
+if ($aac) { Write-Host "admin-api-client exists: $($aac.id)" } else { Write-Host "❌ admin-api-client not found" }
+
+# 4. .env に KC_ADMIN_* が設定されているか
+Get-Content examples/fastapi-app/.env | Select-String "KC_ADMIN"
+# ✅ 正常: KC_ADMIN_CLIENT_ID=admin-api-client, KC_ADMIN_CLIENT_SECRET=<secret>
+```
+
+**恒久対策済み**:
+- `setup.py`: admin router prefix を `/api/admin` に修正済み
+- `realm-export.json`: `example-app` に `oidc-audience-mapper` 追加済み
+- `realm-export.json`: `admin-api-client`（confidential, `roles` スコープ付き, `realm-admin` サービスアカウントロール）追加済み
+- `main.py`: `load_dotenv()` を追加して `os.environ.get("KC_ADMIN_*")` が `.env` を読むよう修正済み
+- `.env.example`: `KC_ADMIN_CLIENT_ID` / `KC_ADMIN_CLIENT_SECRET` テンプレート追加済み
+
+---
+
 ### 起動前セルフチェックリスト
 
 作業開始時に以下を確認すること:
@@ -343,8 +391,9 @@ Invoke-WebRequest -Uri http://localhost:8080/health/ready -UseBasicParsing | Sel
 [ ] http://localhost:8025 → MailHog UI 表示
 [ ] realm roles マッパーの id.token.claim = true (P1診断コマンドで確認)
 [ ] SMTP host = mailhog (P2診断コマンドで確認)
-[ ] examples/fastapi-app/.env が存在する
+[ ] examples/fastapi-app/.env が存在する（KC_ADMIN_* 含む）
 [ ] examples/react-app/.env が存在する
+[ ] GET /api/admin/users が 200 を返す (P6診断コマンドで確認)
 ```
 
-`docker-compose down -v` 後に再起動した場合は **P1・P2 を必ず再診断すること**。
+`docker-compose down -v` 後に再起動した場合は **P1・P2・P6 を必ず再診断すること**。

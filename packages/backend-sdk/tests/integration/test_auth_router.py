@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
 from cryptography.hazmat.primitives.asymmetric import rsa
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from common_auth import AuthConfig, setup_auth
 
@@ -33,7 +33,7 @@ def create_test_token(rsa_key_pair):
         if roles is None:
             roles = ["user"]
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         payload = {
             "sub": sub,
             "email": email,
@@ -64,16 +64,15 @@ def app_with_auth(monkeypatch, rsa_key_pair):
     
     app = FastAPI()
     
-    # Mock JWKS service
-    with patch("common_auth.setup.RemoteJWKSService") as mock_jwks_class:
-        mock_jwks = AsyncMock()
-        mock_jwks.get_public_key.return_value = public_key
-        mock_jwks_class.return_value = mock_jwks
-        
-        # Also patch in middleware
-        with patch("common_auth.middleware.jwt_auth.RemoteJWKSService") as mock_jwks_middleware:
-            mock_jwks_middleware.return_value = mock_jwks
-            setup_auth(app, config)
+    # Mock JWKS service – must stay active through request lifecycle
+    # (Starlette instantiates middleware lazily on first request)
+    mock_jwks = AsyncMock()
+    mock_jwks.get_public_key.return_value = public_key
+    monkeypatch.setattr(
+        "common_auth.middleware.jwt_auth.RemoteJWKSService",
+        lambda *args, **kwargs: mock_jwks,
+    )
+    setup_auth(app, config)
     
     return app, mock_jwks
 

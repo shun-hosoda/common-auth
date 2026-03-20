@@ -278,6 +278,32 @@
       ]
     },
     {
+      "clientId": "admin-api-client",
+      "name": "Admin API Service Account",
+      "description": "Confidential client for backend admin API (client_credentials)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "admin-api-client-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "serviceAccountClientRoles": {
+        "realm-management": [
+          "realm-admin"
+        ]
+      }
+    },
+    {
       "clientId": "example-app",
       "name": "Example Application",
       "description": "Example app for frontend (public client)",
@@ -308,6 +334,21 @@
         "roles",
         "email",
         "tenant"
+      ],
+      "protocolMappers": [
+        {
+          "name": "example-app-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "example-app",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "lightweight.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
       ]
     }
   ],
