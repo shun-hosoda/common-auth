@@ -81,7 +81,9 @@
 │       ├── persona.md            # ドメインペルソナ設定
 │       ├── strategy.md           # レビュー戦略
 │       ├── checklist.md          # チェックリスト
-│       └── logs/                 # /review の記録
+│       └── logs/                 # ★ レビューログ（永続保持・削除禁止）
+│           # 命名: YYYY-MM-DD_HHmmss_<phase>_<context>.md
+│           # phase: req(要件定義) / design(設計) / impl(実装) / test(テスト)
 ├── src/                      # アプリケーションコード
 ├── tests/                    # テストコード（unit/integration/e2e）
 ├── infra/                    # IaC（Terraform, Docker等）

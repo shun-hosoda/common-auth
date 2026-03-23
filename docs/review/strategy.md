@@ -27,11 +27,20 @@
 
 ## マイルストーンゲート
 
-| ゲート | レビュー対象 | APPROVE条件 |
-|--------|-------------|-------------|
-| Gate 1: 設計完了 | PRD + API仕様 + DB設計 | PM + Arch が APPROVE |
-| Gate 2: 実装完了 | コード差分 + テスト結果 | Eng + Sec が APPROVE |
-| Gate 3: リリース判定 | CI結果 + 性能テスト | 全員 APPROVE |
+| ゲート | レビュー対象 | APPROVE条件 | ログのフェーズ |
+|--------|-------------|-------------|--------------|
+| Gate 0: 要件定義完了 | PRD・ユーザーストーリー | PM が APPROVE | `req` |
+| Gate 1: 設計完了 | PRD + API仕様 + DB設計 | PM + Arch が APPROVE | `design` |
+| Gate 2: 実装完了 | コード差分 + テスト結果 | Eng + Sec が APPROVE | `impl` |
+| Gate 3: リリース判定 | CI結果 + 性能テスト | 全員 APPROVE | `test` |
+
+## レビューログ運用
+
+- **全レビューの記録を `docs/review/logs/` に永続保持する（削除禁止）**
+- ファイル名でフェーズを明示: `YYYY-MM-DD_HHmmss_<phase>_<context>.md`
+  - `req` = 要件定義, `design` = 設計, `impl` = 実装, `test` = テスト
+- `/fix` → `/re-review` の記録は同一ファイルに追記する
+- 詳細は `docs/review/logs/README.md` を参照
 
 ## コンテキスト効率化
 

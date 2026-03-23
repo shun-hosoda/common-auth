@@ -18,7 +18,7 @@ FILES=(
   "docs/design/logs/design-001-mfa.md"
   "docs/adr/adr-001-keycloak-mfa.md"
   "docs/implementation/logs/impl-001-mfa.md"
-  "docs/review/logs/review-001-mfa.md"
+  "docs/review/logs/2026-03-20_120000_design_mfa-infrastructure.md"
   "CLAUDE.md"
   ".cursor/rules/autonomous_workflow.mdc"
   ".cursor/rules/core_rules.mdc"
