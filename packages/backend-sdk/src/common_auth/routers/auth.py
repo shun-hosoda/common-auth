@@ -2,12 +2,13 @@
 
 import logging
 from typing import Literal
-from datetime import datetime
-from fastapi import APIRouter, Depends, Request, HTTPException
+
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 from pydantic import BaseModel
 
 from common_auth.dependencies.current_user import get_current_user
 from common_auth.models.auth_user import AuthUser
+from common_auth.services.keycloak_admin_client import KeycloakAdminClient
 
 logger = logging.getLogger(__name__)
 
@@ -132,3 +133,72 @@ async def post_auth_logout(
     logger.info(f"User logged out: {user.sub}")
     # In future: revoke refresh token via Keycloak API
     return None
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _get_kc_admin_readonly(request: Request) -> KeycloakAdminClient:
+    """Return KeycloakAdminClient from app.state (read-only, no lazy init).
+
+    Unlike admin.py's ``_get_kc_admin`` this does **not** create the client
+    on first access.  If the admin client was never initialised (e.g. no
+    ``KC_ADMIN_CLIENT_SECRET``), we return 503.
+    """
+    kc = getattr(request.app.state, "kc_admin_client", None)
+    if kc is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin API not configured",
+        )
+    return kc
+
+
+# ── MFA status models ────────────────────────────────────────────────────────
+
+
+class MfaStatusResponse(BaseModel):
+    """MFA status for the current user."""
+    mfa_enabled: bool
+    mfa_method: str
+    mfa_configured: bool
+
+
+# ── MFA status endpoint ──────────────────────────────────────────────────────
+
+
+@router.get("/mfa-status", response_model=MfaStatusResponse, tags=["auth"])
+async def get_mfa_status(
+    request: Request,
+    user: AuthUser = Depends(get_current_user),
+) -> MfaStatusResponse:
+    """
+    Return the current user's MFA configuration status.
+
+    Uses user attributes (mirrored from tenant group) to determine
+    the tenant MFA policy, and checks OTP credentials to determine
+    whether TOTP is actually configured.
+    """
+    kc = _get_kc_admin_readonly(request)
+    kc_user = await kc.get_user(user.sub)
+
+    attrs = kc_user.get("attributes") or {}
+    mfa_enabled = attrs.get("mfa_enabled", ["false"])[0] == "true"
+    mfa_method = attrs.get("mfa_method", ["totp"])[0]
+
+    # Determine if MFA is actually configured for this user
+    mfa_configured = False
+    if mfa_enabled:
+        if mfa_method == "totp":
+            # Check if user has OTP credential
+            creds = await kc.get_user_credentials(user.sub)
+            mfa_configured = any(c.get("type") == "otp" for c in creds)
+        elif mfa_method == "email":
+            # Email OTP doesn't require user-side credential setup
+            mfa_configured = True
+
+    return MfaStatusResponse(
+        mfa_enabled=mfa_enabled,
+        mfa_method=mfa_method,
+        mfa_configured=mfa_configured,
+    )

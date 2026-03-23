@@ -205,6 +205,12 @@ class KeycloakAdminClient:
                 )
                 del_resp.raise_for_status()
 
+    async def get_user_credentials(self, user_id: str) -> list[dict[str, Any]]:
+        """Return the credential list for a user."""
+        resp = await self._request("GET", f"/users/{user_id}/credentials")
+        resp.raise_for_status()
+        return resp.json()
+
     async def find_group_by_name(self, name: str) -> dict[str, Any] | None:
         """Find a realm group (or subgroup) by exact name."""
         resp = await self._request(

@@ -16,7 +16,7 @@ Environment variables required:
 import asyncio
 import os
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -124,6 +124,11 @@ class CreateClientBody(BaseModel):
     description: str = ""
 
 
+class MfaSettingsBody(BaseModel):
+    mfa_enabled: bool
+    mfa_method: Literal["totp", "email"] = "totp"
+
+
 # ── User endpoints ────────────────────────────────────────────────────────────
 
 
@@ -183,6 +188,24 @@ async def create_user(
             kc.assign_realm_role(new_id, "user"),
             return_exceptions=True,  # best-effort: don't fail on role/group errors
         )
+
+        # ── MFA extension: set MFA attrs for new user if tenant MFA is enabled ──
+        if group:
+            full_group = await kc.get_group(group["id"])
+            group_attrs = full_group.get("attributes") or {}
+            mfa_enabled = group_attrs.get("mfa_enabled", ["false"])[0]
+            mfa_method = group_attrs.get("mfa_method", ["totp"])[0]
+            if mfa_enabled == "true":
+                await kc.update_user(new_id, {
+                    "attributes": {
+                        "tenant_id": [user.tenant_id],
+                        "mfa_enabled": ["true"],
+                        "mfa_method": [mfa_method],
+                    },
+                    "requiredActions": (
+                        ["CONFIGURE_TOTP"] if mfa_method == "totp" else []
+                    ),
+                })
 
     return {"id": new_id}
 
@@ -284,6 +307,136 @@ async def reset_mfa(
     await _check_tenant_boundary(kc, user_id, user)
     await kc.reset_mfa(user_id)
     return {"status": "mfa_reset"}
+
+
+# ── MFA policy endpoints ─────────────────────────────────────────────────────
+
+# Limits concurrency for bulk Keycloak calls (reset_mfa, set_user_attributes, etc.)
+_MFA_SEMAPHORE = asyncio.Semaphore(10)
+
+
+@router.get("/security/mfa", tags=["admin"])
+async def get_mfa_settings(
+    request: Request,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Get current tenant MFA policy from group attributes.
+
+    Requires: tenant_admin or super_admin
+    """
+    _require_admin(user)
+    kc = _get_kc_admin(request)
+
+    group = await kc.find_group_by_name(user.tenant_id)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant group not found",
+        )
+
+    full_group = await kc.get_group(group["id"])
+    attrs = full_group.get("attributes") or {}
+    mfa_enabled = attrs.get("mfa_enabled", ["false"])[0] == "true"
+    mfa_method = attrs.get("mfa_method", ["totp"])[0]
+
+    return {"mfa_enabled": mfa_enabled, "mfa_method": mfa_method}
+
+
+@router.put("/security/mfa", tags=["admin"])
+async def update_mfa_settings(
+    body: MfaSettingsBody,
+    request: Request,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Update tenant MFA policy and propagate to all tenant users.
+
+    Flow:
+    1. Permission check
+    2. Find tenant group → get full group (2-stage for attributes)
+    3. Update group attributes
+    4. List all tenant users
+    5. If method changed & MFA still enabled → bulk reset OTP credentials
+    6. Set user attributes + required actions per final state
+    7. Return update summary
+
+    Requires: tenant_admin or super_admin
+    """
+    _require_admin(user)
+    kc = _get_kc_admin(request)
+
+    # ── 2. Find group + get old attributes ────────────────────────────────
+    group = await kc.find_group_by_name(user.tenant_id)
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant group not found",
+        )
+    full_group = await kc.get_group(group["id"])
+    old_attrs = full_group.get("attributes") or {}
+    old_method = old_attrs.get("mfa_method", ["totp"])[0]
+
+    new_enabled = body.mfa_enabled
+    new_method = body.mfa_method
+
+    # ── 3. Update group attributes ────────────────────────────────────────
+    await kc.update_group_attributes(
+        group["id"],
+        {
+            "mfa_enabled": [str(new_enabled).lower()],
+            "mfa_method": [new_method],
+        },
+    )
+
+    # ── 4. List all tenant users ──────────────────────────────────────────
+    users = await kc.list_users(tenant_id=user.tenant_id)
+    user_ids = [u["id"] for u in users]
+
+    # ── 5. Method change → bulk reset MFA credentials ─────────────────────
+    method_changed = old_method != new_method and new_enabled
+    reset_failed: list[str] = []
+    if method_changed:
+
+        async def _reset_one(uid: str) -> None:
+            async with _MFA_SEMAPHORE:
+                await kc.reset_mfa(uid)
+
+        results = await asyncio.gather(
+            *[_reset_one(uid) for uid in user_ids],
+            return_exceptions=True,
+        )
+        for uid, result in zip(user_ids, results):
+            if isinstance(result, BaseException):
+                logger.warning("reset_mfa failed for user %s: %s", uid, result)
+                reset_failed.append(uid)
+
+    # ── 6. Set user attributes + required actions ─────────────────────────
+    user_attrs: dict[str, list[str]] = {
+        "mfa_enabled": [str(new_enabled).lower()],
+        "mfa_method": [new_method],
+    }
+    failed_attr = await kc.set_user_attributes_bulk(user_ids, user_attrs)
+
+    if new_enabled and new_method == "totp":
+        failed_action = await kc.add_required_action_bulk(user_ids, "CONFIGURE_TOTP")
+    else:
+        # Disabled or Email → remove CONFIGURE_TOTP
+        failed_action = await kc.remove_required_action_bulk(
+            user_ids, "CONFIGURE_TOTP"
+        )
+
+    # Merge failures (deduplicate)
+    all_failed = list(set(failed_attr) | set(failed_action) | set(reset_failed))
+    users_updated = len(user_ids) - len(all_failed)
+
+    return {
+        "status": "updated",
+        "mfa_enabled": new_enabled,
+        "mfa_method": new_method,
+        "users_updated": users_updated,
+        "users_failed": len(all_failed),
+    }
 
 
 # ── Client (tenant) endpoints ─────────────────────────────────────────────────
