@@ -242,6 +242,97 @@ class KeycloakAdminClient:
         )
         resp2.raise_for_status()
 
+    # ── Group operations ─────────────────────────────────────────────────────
+
+    async def get_group(self, group_id: str) -> dict[str, Any]:
+        """Fetch a single group by UUID, including its attributes."""
+        resp = await self._request("GET", f"/groups/{group_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    async def update_group_attributes(
+        self,
+        group_id: str,
+        attrs: dict[str, list[str]],
+    ) -> None:
+        """Merge *attrs* into the group's existing attributes and save.
+
+        Existing attributes not in *attrs* are preserved.
+        """
+        group = await self.get_group(group_id)
+        existing = group.get("attributes") or {}
+        existing.update(attrs)
+        group["attributes"] = existing
+        resp = await self._request("PUT", f"/groups/{group_id}", json=group)
+        resp.raise_for_status()
+
+    # ── Bulk user operations (MFA policy) ─────────────────────────────────────
+
+    async def set_user_attributes_bulk(
+        self,
+        user_ids: list[str],
+        attrs: dict[str, list[str]],
+    ) -> list[str]:
+        """Merge *attrs* into each user's attributes.
+
+        Returns a list of user IDs that **failed** to update.
+        """
+        failed: list[str] = []
+        for uid in user_ids:
+            try:
+                user = await self.get_user(uid)
+                existing = user.get("attributes") or {}
+                existing.update(attrs)
+                await self.update_user(uid, {"attributes": existing})
+            except Exception:
+                logger.warning("Failed to set attributes for user %s", uid, exc_info=True)
+                failed.append(uid)
+        return failed
+
+    async def add_required_action_bulk(
+        self,
+        user_ids: list[str],
+        action: str,
+    ) -> list[str]:
+        """Add *action* to each user's requiredActions (skip if already present).
+
+        Returns a list of user IDs that **failed** to update.
+        """
+        failed: list[str] = []
+        for uid in user_ids:
+            try:
+                user = await self.get_user(uid)
+                actions: list[str] = user.get("requiredActions") or []
+                if action not in actions:
+                    actions.append(action)
+                    await self.update_user(uid, {"requiredActions": actions})
+            except Exception:
+                logger.warning("Failed to add required action for user %s", uid, exc_info=True)
+                failed.append(uid)
+        return failed
+
+    async def remove_required_action_bulk(
+        self,
+        user_ids: list[str],
+        action: str,
+    ) -> list[str]:
+        """Remove *action* from each user's requiredActions (skip if absent).
+
+        Returns a list of user IDs that **failed** to update.
+        """
+        failed: list[str] = []
+        for uid in user_ids:
+            try:
+                user = await self.get_user(uid)
+                actions: list[str] = user.get("requiredActions") or []
+                if action in actions:
+                    actions.remove(action)
+                    await self.update_user(uid, {"requiredActions": actions})
+            except Exception:
+                logger.warning("Failed to remove required action for user %s", uid, exc_info=True)
+                failed.append(uid)
+        return failed
+
     # ── Client (tenant) operations ────────────────────────────────────────────
 
     _INTERNAL_CLIENT_PREFIXES = (
