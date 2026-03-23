@@ -1,4 +1,4 @@
-# Frontend Example App 設計書
+# React Example App 設計書
 
 ## 1. 概要
 

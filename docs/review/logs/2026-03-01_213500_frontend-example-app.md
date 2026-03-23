@@ -2,7 +2,7 @@
 
 ## メタデータ
 - 日時: 2026-03-01 21:35:00
-- 対象: Frontend Example App (`examples/react-app/`) + 設計書 (`docs/design/frontend-example-app.md`)
+- 対象: Frontend Example App (`examples/react-app/`) + 設計書 (`docs/design/react-example-app.md`)
 - レビュアー: Review Board（5人合議制）
 - ラウンド: 1
 
@@ -11,7 +11,7 @@
 事後設計レビュー。実装済みのReact Example Appに対して設計書を作成し、コードと設計書の整合性を検証。
 
 **変更ファイル一覧**:
-- `docs/design/frontend-example-app.md` (新規)
+- `docs/design/react-example-app.md` (新規)
 - `examples/react-app/src/App.tsx`
 - `examples/react-app/src/main.tsx`
 - `examples/react-app/src/pages/Home.tsx`
@@ -135,7 +135,7 @@ DBの指摘を踏まえると、設計書の数値的主張は検証不足。Typ
 - **型チェック**: 正常終了 ✅
 
 **[SHOULD FIX #1] ✅ 設計書のエラーハンドリング追記**
-- `docs/design/frontend-example-app.md`: 3.2 Callbackセクションにエラーハンドリングを追記
+- `docs/design/react-example-app.md`: 3.2 Callbackセクションにエラーハンドリングを追記
 - 9.2 エラーハンドリングセクションを新設し、Keycloakダウン時、Silent Renew失敗時、トークン期限切れ時の挙動を明記
 
 **[SHOULD FIX #2] ✅ バンドルサイズの実測値を記載**
@@ -147,7 +147,7 @@ DBの指摘を踏まえると、設計書の数値的主張は検証不足。Typ
 
 **ドキュメント更新 ✅**
 - `packages/frontend-sdk/README.md`: `handleCallback()`の使用例を追記、誤った`UserManager`直接生成例を修正
-- `docs/design/frontend-example-app.md`: セキュリティセクション8に「UserManager一元管理」を追加
+- `docs/design/react-example-app.md`: セキュリティセクション8に「UserManager一元管理」を追加
 
 ### 未対応
 

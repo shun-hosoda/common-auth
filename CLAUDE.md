@@ -61,14 +61,22 @@
 │       ├── db-specialist/        # スキーマ・クエリ最適化
 │       └── ui-design/            # UIデザイン設計・実装（汎用SaaS UI）
 ├── docs/
+│   ├── _summary.md           # 全設計書の要約（トークン効率化用）
 │   ├── prd/                  # プロダクト要件定義書
 │   ├── adr/                  # アーキテクチャ決定記録
 │   ├── api/                  # API仕様（OpenAPI）
 │   ├── db/                   # DB設計
-│   ├── design/               # 設計会議記録
-│   │   └── logs/                 # /design の記録
-│   ├── implementation/       # 実装計画記録
-│   │   └── logs/                 # /implement の記録
+│   ├── design/               # ★ 正式な設計書（仕様・決定事項のみ）
+│   │   ├── architecture.md       # システムアーキテクチャ全体設計
+│   │   ├── multi-tenant.md       # マルチテナント設計
+│   │   ├── user-management.md    # ユーザー管理・RBAC
+│   │   ├── backend-sdk-details.md # Backend SDK設計（Rate Limiting/SMTP含む）
+│   │   ├── frontend-sdk-details.md # Frontend SDK設計
+│   │   ├── react-example-app.md   # React Example App設計
+│   │   ├── auth/mfa/             # MFA関連設計書
+│   │   └── logs/                 # ★ 会議ログ（議論の経緯・生の記録）
+│   ├── implementation/       # 実装計画
+│   │   └── logs/                 # /implement 会議ログ + 実装計画
 │   └── review/               # レビュー設定・記録
 │       ├── persona.md            # ドメインペルソナ設定
 │       ├── strategy.md           # レビュー戦略

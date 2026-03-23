@@ -17,7 +17,8 @@
 | 1 | Backend SDK基盤 (JWT, JWKS, RLS) | ✅ 完了 |
 | 2a | Rate Limiting, MFA, SMTP | ✅ 完了 |
 | 2b | Frontend SDK (React Hooks) | ✅ 完了 |
-| 3 | ユーザー管理UI (Custom React + Admin API), Keycloak Themes | 🚧 設計中 |
+| 3 | ユーザー管理UI (Custom React + Admin API), Keycloak Themes | ✅ 完了 |
+| 3.5 | テナントMFAポリシー管理 | 🚧 実装計画済み |
 
 ## 主要ADR
 
@@ -123,12 +124,47 @@ auth-stack/keycloak/
 
 ## 次のタスク
 
-Phase 3: 完了状態
-- ✅ Backend Admin API（Keycloak Admin REST APIプロキシ）
-- ✅ Reactユーザー管理画面（CRUD + MFAリセット + Dashboard統一レイアウト）
-- ✅ Keycloakログインテーマ（CSS変数ベース）
-- ✅ テナント境界チェック強化
-- ✅ ロール判定バグ修正（realm roles mapper + AuthProvider アクセストークン対応）
+Phase 3.5: テナントMFAポリシー管理（実装計画済み）
+- 設計書: `docs/design/auth/mfa/` (tenant-policy, login-flow, account-settings, infrastructure)
+- 実装計画: `docs/implementation/logs/impl-002-tenant-mfa-policy.md`
+- Step 1: KeycloakAdminClient 5メソッド拡張
+- Step 2: Backend API（MFAポリシー + ステータス + create_user拡張）
+- Step 3: realm-export.json（グループ属性 + 認証フロー）
+- Step 4: Frontend（SecuritySettings + MfaStatusCard + ルート）
+
+## 設計書一覧
+
+### ドキュメント体系
+
+```
+docs/design/
+├── *.md                    ← 正式な設計書（仕様・決定事項のみ）
+├── auth/mfa/*.md           ← MFA関連の正式な設計書
+└── logs/*.md               ← 会議ログ（議論の経緯・根拠追跡用）
+```
+
+> **参照ルール**: 実装時は正式な設計書のみを参照する。
+> 会議ログは設計判断の根拠を追跡する必要がある場合にのみ参照する。
+
+### コア設計書（正式）
+
+| ファイル | 内容 | 元ログ |
+|---------|------|--------|
+| [architecture.md](design/architecture.md) | システムアーキテクチャ全体設計 | `logs/2026-03-01_163700_auth-module.md` |
+| [multi-tenant.md](design/multi-tenant.md) | マルチテナント設計（Shared Realm + Groups） | `logs/2026-03-01_saas-multitenant.md` |
+| [user-management.md](design/user-management.md) | Phase 3 ユーザー管理・RBAC | `logs/2026-03-01_phase3-user-management.md` |
+| [backend-sdk-details.md](design/backend-sdk-details.md) | Backend SDK設計（Rate Limiting / SMTP含む） | `logs/2026-03-01_190131_phase2-features.md` |
+| [frontend-sdk-details.md](design/frontend-sdk-details.md) | Frontend SDK設計 | `logs/2026-03-01_190131_phase2-features.md` |
+| [react-example-app.md](design/react-example-app.md) | React Example App設計 | — |
+
+### MFA設計書（正式: `docs/design/auth/mfa/`）
+
+| ファイル | 内容 | 元ログ |
+|---------|------|--------|
+| [infrastructure.md](design/auth/mfa/infrastructure.md) | MFA基盤インフラ（Keycloak設定・環境変数） | `logs/design-001-mfa.md` |
+| [tenant-policy.md](design/auth/mfa/tenant-policy.md) | テナントMFAポリシー管理 | `logs/design-002-tenant-mfa-policy.md` |
+| [login-flow.md](design/auth/mfa/login-flow.md) | 統合MFA認証フロー | — |
+| [account-settings.md](design/auth/mfa/account-settings.md) | アカウントMFA設定 | — |
 
 ---
 
