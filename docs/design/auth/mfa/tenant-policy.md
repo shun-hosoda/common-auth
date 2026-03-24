@@ -1,7 +1,10 @@
 # テナントMFAポリシー管理 — 管理者設定
 
-**更新日**: 2026-03-20
+**更新日**: 2026-03-24
 **対象PRD**: Phase 3.5 (FR-030〜FR-037)
+
+> **⚠️ KC 24.0.5 制約**: Email OTP (`auth-email-otp-form`) は Keycloak 26+ で追加された機能のため、
+> 現行環境では **TOTP のみ対応**。Email OTP は KC 26+ アップグレード時に対応予定。
 
 ---
 
@@ -20,7 +23,7 @@
 {
   "tenant_id": ["acme-corp"],
   "mfa_enabled": ["true"],       ← テナント設定
-  "mfa_method": ["totp"]         ← "totp" | "email"
+  "mfa_method": ["totp"]         ← 現行: "totp" のみ（KC 26+ で "email" 追加予定）
 }
 
 ユーザー attributes（認証フロー参照用ミラー）:
@@ -43,7 +46,7 @@
 | 項目 | 値 |
 |------|------|
 | 権限 | `tenant_admin` / `super_admin` |
-| レスポンス | `{ "mfa_enabled": bool, "mfa_method": "totp" \| "email" }` |
+| レスポンス | `{ "mfa_enabled": bool, "mfa_method": "totp" }` |
 | データソース | テナントグループのグループ属性 |
 
 ### PUT /api/admin/security/mfa
@@ -51,8 +54,10 @@
 | 項目 | 値 |
 |------|------|
 | 権限 | `tenant_admin` / `super_admin` |
-| リクエスト | `{ "mfa_enabled": bool, "mfa_method": "totp" \| "email" }` |
+| リクエスト | `{ "mfa_enabled": bool, "mfa_method": "totp" }` |
 | レスポンス | `{ "status": "updated", "mfa_enabled": bool, "mfa_method": str, "users_updated": int, "users_failed": int }` |
+
+> **KC 26+ 対応時**: `mfa_method` に `"email"` を追加予定。`MfaSettingsBody.mfa_method: Literal["totp", "email"]` に拡張。
 
 ### 更新処理フロー
 
@@ -69,8 +74,7 @@
 6. ユーザー属性・Required Action を最終状態に基づき一括設定:
    a. new_mfa_enabled = true:
       - ユーザー属性: mfa_enabled="true", mfa_method=<グループ値で上書き>
-      - new_mfa_method=totp → CONFIGURE_TOTP Required Action 追加
-      - new_mfa_method=email → CONFIGURE_TOTP Required Action 削除
+      - mfa_method=totp → CONFIGURE_TOTP Required Action 追加
    b. new_mfa_enabled = false:
       - ユーザー属性: mfa_enabled="false"
       - mfa_method はグループ属性の値で上書き（再有効化時の不整合防止）
@@ -134,9 +138,8 @@ navItems:
 │          │  │  ◉ TOTP（認証アプリ）            │  │
 │          │  │    Google Authenticator 等で      │  │
 │          │  │    ワンタイムコードを生成          │  │
-│          │  │  ○ メールOTP                     │  │
-│          │  │    ログイン時にメールで            │  │
-│          │  │    ワンタイムコードを送信          │  │
+│          │  │  ○ メールOTP（準備中）           │  │
+│          │  │    Keycloak 26以降で対応予定       │  │
 │          │  │                                  │  │
 │          │  │  [保存する]                       │  │
 │          │  └──────────────────────────────────┘  │
@@ -148,9 +151,12 @@ navItems:
 
 ### 方式変更時の確認ダイアログ
 
+> **注**: 現行（KC 24.0.5）ではTOTPのみ対応のため、方式変更ダイアログは発生しない。
+> KC 26+ でEmail OTP対応時に以下のダイアログを有効化する。
+
 ```
 ⚠️ MFA方式の変更
-MFA方式を「TOTP」→「メールOTP」に変更すると、
+MFA方式を変更すると、
 テナント内の全ユーザーのMFA設定がリセットされます。
 各ユーザーは次回ログイン時に新しい方式でMFAを再設定する必要があります。
 
@@ -187,10 +193,7 @@ MFA方式を「TOTP」→「メールOTP」に変更すると、
 | GET /security/mfa — 初期状態 (mfa_enabled=false) | 正常 | admin router |
 | GET /security/mfa — userロールで403 | 異常 | admin router |
 | PUT /security/mfa — TOTP有効化 | 正常 | admin router |
-| PUT /security/mfa — Email有効化 | 正常 | admin router |
 | PUT /security/mfa — MFA無効化 | 正常 | admin router |
-| PUT /security/mfa — 方式変更 (TOTP→Email) | 正常 | admin router |
-| PUT /security/mfa — 方式変更 (Email→TOTP) | 正常 | admin router |
 | PUT /security/mfa — userロールで403 | 異常 | admin router |
 | PUT /security/mfa — 他テナントのグループにアクセス試行 | 異常 | admin router |
 | PUT /security/mfa — 部分失敗 (モック) | 境界 | admin router |
@@ -202,7 +205,6 @@ MFA方式を「TOTP」→「メールOTP」に変更すると、
 | GET /auth/mfa-status — MFA無効テナント | 正常 | auth router |
 | GET /auth/mfa-status — MFA有効+TOTP設定済 | 正常 | auth router |
 | GET /auth/mfa-status — MFA有効+TOTP未設定 | 正常 | auth router |
-| GET /auth/mfa-status — MFA有効+Email OTP | 正常 | auth router |
 | GET /auth/mfa-status — 未認証ユーザーで401 | 異常 | auth router |
 
 ---

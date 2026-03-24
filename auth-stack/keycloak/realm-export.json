@@ -296,12 +296,7 @@
         "profile",
         "roles",
         "email"
-      ],
-      "serviceAccountClientRoles": {
-        "realm-management": [
-          "realm-admin"
-        ]
-      }
+      ]
     },
     {
       "clientId": "example-app",
@@ -403,14 +398,18 @@
           "name": "acme-corp",
           "path": "/tenants/acme-corp",
           "attributes": {
-            "tenant_id": ["acme-corp"]
+            "tenant_id": ["acme-corp"],
+            "mfa_enabled": ["false"],
+            "mfa_method": ["totp"]
           }
         },
         {
           "name": "globex-inc",
           "path": "/tenants/globex-inc",
           "attributes": {
-            "tenant_id": ["globex-inc"]
+            "tenant_id": ["globex-inc"],
+            "mfa_enabled": ["false"],
+            "mfa_method": ["totp"]
           }
         }
       ]
@@ -514,10 +513,119 @@
       "groups": [
         "/tenants/globex-inc"
       ]
+    },
+    {
+      "username": "service-account-admin-api-client",
+      "enabled": true,
+      "serviceAccountClientId": "admin-api-client",
+      "clientRoles": {
+        "realm-management": [
+          "realm-admin"
+        ]
+      }
     }
   ],
+  "authenticationFlows": [
+    {
+      "alias": "unified-mfa-browser",
+      "description": "Browser flow with conditional MFA per tenant policy",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10
+        },
+        {
+          "flowAlias": "unified-mfa-browser forms",
+          "requirement": "ALTERNATIVE",
+          "priority": 20
+        }
+      ]
+    },
+    {
+      "alias": "unified-mfa-browser forms",
+      "description": "Username/password + conditional MFA",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-password-form",
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "flowAlias": "unified-mfa-browser mfa-gate",
+          "requirement": "CONDITIONAL",
+          "priority": 20
+        }
+      ]
+    },
+    {
+      "alias": "unified-mfa-browser mfa-gate",
+      "description": "MFA gate: check mfa_enabled attribute",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "mfa-gate-condition",
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "flowAlias": "unified-mfa-browser totp-subflow",
+          "requirement": "CONDITIONAL",
+          "priority": 20
+        }
+      ]
+    },
+    {
+      "alias": "unified-mfa-browser totp-subflow",
+      "description": "TOTP branch: check mfa_method=totp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "mfa-totp-condition",
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "requirement": "REQUIRED",
+          "priority": 20
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "mfa-gate-condition",
+      "config": {
+        "attribute_name": "mfa_enabled",
+        "expected_attribute_value": "true",
+        "not": "false"
+      }
+    },
+    {
+      "alias": "mfa-totp-condition",
+      "config": {
+        "attribute_name": "mfa_method",
+        "expected_attribute_value": "totp",
+        "not": "false"
+      }
+    }
+  ],
+  "browserFlow": "unified-mfa-browser",
   "otpPolicyType": "totp",
-  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyAlgorithm": "HmacSHA256",
   "otpPolicyInitialCounter": 0,
   "otpPolicyDigits": 6,
   "otpPolicyLookAheadWindow": 1,
@@ -562,3 +670,4 @@
   "defaultLocale": "en",
   "defaultRoles": ["offline_access", "uma_authorization", "user"]
 }
+
