@@ -183,5 +183,5 @@ export async function updateMfaSettings(
 // ── MFA status (auth router — uses baseOverride) ──────────────────────────────
 
 export async function getMfaStatus(token: string): Promise<MfaStatus> {
-  return request<MfaStatus>('/mfa-status', token, undefined, '/api/auth')
+  return request<MfaStatus>('/mfa-status', token, undefined, '/auth')
 }

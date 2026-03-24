@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 import { t } from '../theme/tokens'
-import MfaStatusCard from '../components/MfaStatusCard'
 import {
   useIsMobile,
   UserDropdown,
@@ -114,7 +113,7 @@ export default function Dashboard() {
           flex: 1, minWidth: 0,
           padding: isMobile ? '16px' : '32px 24px',
         }}>
-          <MfaStatusCard />
+          {/* メインコンテンツをここに追加 */}
         </main>
       </div>
     </div>

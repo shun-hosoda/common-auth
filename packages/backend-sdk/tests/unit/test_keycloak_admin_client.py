@@ -165,13 +165,16 @@ class TestSetUserAttributesBulk:
     ) -> None:
         user_ids = ["user-1", "user-2", "user-3"]
 
-        # GET each user
+        # GET each user — return realistic Keycloak UserRepresentation
         for uid in user_ids:
             httpx_mock.add_response(
                 url=f"{ADMIN_BASE}/users/{uid}",
                 method="GET",
                 json={
                     "id": uid,
+                    "username": f"{uid}@example.com",
+                    "email": f"{uid}@example.com",
+                    "enabled": True,
                     "attributes": {"tenant_id": ["acme-corp"]},
                 },
             )
@@ -187,6 +190,55 @@ class TestSetUserAttributesBulk:
         )
 
         assert failed == []
+
+    async def test_put_sends_full_user_representation(
+        self, kc: KeycloakAdminClient, httpx_mock: HTTPXMock
+    ) -> None:
+        """PUT body must include the complete UserRepresentation, not just attributes.
+
+        Keycloak Admin API returns 400 Bad Request when required fields like
+        'username' are missing from the PUT body.  This test ensures we send
+        back the full object fetched via GET with the attributes merged in.
+        """
+        user_repr = {
+            "id": "user-full",
+            "username": "full@example.com",
+            "email": "full@example.com",
+            "firstName": "Full",
+            "lastName": "User",
+            "enabled": True,
+            "emailVerified": True,
+            "attributes": {"tenant_id": ["acme-corp"]},
+        }
+        httpx_mock.add_response(
+            url=f"{ADMIN_BASE}/users/user-full",
+            method="GET",
+            json=user_repr,
+        )
+        httpx_mock.add_response(
+            url=f"{ADMIN_BASE}/users/user-full",
+            method="PUT",
+            status_code=204,
+        )
+
+        await kc.set_user_attributes_bulk(
+            ["user-full"],
+            {"mfa_enabled": ["true"]},
+        )
+
+        put_request = [
+            r for r in httpx_mock.get_requests() if r.method == "PUT"
+        ][-1]
+        body = json.loads(put_request.content)
+
+        # Must include original fields — not just {"attributes": ...}
+        assert body["id"] == "user-full"
+        assert body["username"] == "full@example.com"
+        assert body["email"] == "full@example.com"
+        assert body["enabled"] is True
+        # And merged attributes
+        assert body["attributes"]["tenant_id"] == ["acme-corp"]
+        assert body["attributes"]["mfa_enabled"] == ["true"]
 
     async def test_one_user_fails_returns_failed_list(
         self, kc: KeycloakAdminClient, httpx_mock: HTTPXMock

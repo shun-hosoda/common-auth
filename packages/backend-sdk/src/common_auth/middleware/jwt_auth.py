@@ -73,15 +73,6 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         # Verify and decode JWT
         try:
             user = await self._verify_token(token)
-            
-            # Set user and tenant_id in request state
-            request.state.user = user
-            request.state.tenant_id = user.tenant_id
-            
-            logger.debug(f"Authenticated user: {user.sub}, tenant: {user.tenant_id}")
-            
-            return await call_next(request)
-            
         except ExpiredSignatureError:
             logger.warning(f"Token expired for path: {request.url.path}")
             return self._unauthorized_response("Token expired")
@@ -91,6 +82,14 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error(f"Unexpected error verifying token: {e}")
             return self._error_response("Authentication service error", status_code=500)
+
+        # Set user and tenant_id in request state
+        request.state.user = user
+        request.state.tenant_id = user.tenant_id
+
+        logger.debug(f"Authenticated user: {user.sub}, tenant: {user.tenant_id}")
+
+        return await call_next(request)
 
     async def _verify_token(self, token: str) -> AuthUser:
         """

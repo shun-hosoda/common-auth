@@ -172,6 +172,11 @@ class KeycloakAdminClient:
 
     async def update_user(self, user_id: str, payload: dict[str, Any]) -> None:
         resp = await self._request("PUT", f"/users/{user_id}", json=payload)
+        if resp.status_code >= 400:
+            logger.warning(
+                "update_user %s returned %s: %s",
+                user_id, resp.status_code, resp.text,
+            )
         resp.raise_for_status()
 
     async def disable_user(self, user_id: str) -> None:
@@ -289,7 +294,8 @@ class KeycloakAdminClient:
                 user = await self.get_user(uid)
                 existing = user.get("attributes") or {}
                 existing.update(attrs)
-                await self.update_user(uid, {"attributes": existing})
+                user["attributes"] = existing
+                await self.update_user(uid, user)
             except Exception:
                 logger.warning("Failed to set attributes for user %s", uid, exc_info=True)
                 failed.append(uid)
