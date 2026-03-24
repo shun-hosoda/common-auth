@@ -236,11 +236,14 @@ export default function AdminUsers() {
   const navItems: NavItem[] = [
     { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
     ...(isAdmin      ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
+    ...(isAdmin      ? [{ label: 'セキュリティ設定', icon: '🔒', path: '/security' }] : []),
     ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
   ]
 
   const dropdownItems: DropdownItem[] = [
-    { label: 'セキュリティ設定', icon: '🔒', onClick: configureMFA },
+    ...(isAdmin
+      ? [{ label: 'セキュリティ設定', icon: '🔒', onClick: () => navigate('/security') }]
+      : [{ label: 'セキュリティ設定', icon: '🔒', onClick: configureMFA }]),
     { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
   ]
 

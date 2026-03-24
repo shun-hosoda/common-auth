@@ -54,8 +54,10 @@ async function request<T>(
   path: string,
   token: string,
   options?: RequestInit,
+  baseOverride?: string,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const base = baseOverride ?? BASE
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -139,4 +141,47 @@ export async function createClient(
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+// ── MFA types ─────────────────────────────────────────────────────────────────
+
+export interface MfaSettings {
+  mfa_enabled: boolean
+  mfa_method: string
+}
+
+export interface MfaUpdateResult {
+  status: string
+  mfa_enabled: boolean
+  mfa_method: string
+  users_updated: number
+  users_failed: number
+}
+
+export interface MfaStatus {
+  mfa_enabled: boolean
+  mfa_method: string
+  mfa_configured: boolean
+}
+
+// ── MFA operations (admin) ────────────────────────────────────────────────────
+
+export async function getMfaSettings(token: string): Promise<MfaSettings> {
+  return request<MfaSettings>('/security/mfa', token)
+}
+
+export async function updateMfaSettings(
+  token: string,
+  body: { mfa_enabled: boolean; mfa_method: string },
+): Promise<MfaUpdateResult> {
+  return request<MfaUpdateResult>('/security/mfa', token, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// ── MFA status (auth router — uses baseOverride) ──────────────────────────────
+
+export async function getMfaStatus(token: string): Promise<MfaStatus> {
+  return request<MfaStatus>('/mfa-status', token, undefined, '/api/auth')
 }

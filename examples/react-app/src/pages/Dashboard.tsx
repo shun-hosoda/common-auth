@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 import { t } from '../theme/tokens'
+import MfaStatusCard from '../components/MfaStatusCard'
 import {
   useIsMobile,
   UserDropdown,
@@ -36,12 +37,15 @@ export default function Dashboard() {
   const navItems: NavItem[] = [
     { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
     ...(isAdmin ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
-    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/tenants' }] : []),
+    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: '🔒', path: '/security' }] : []),
+    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
   ]
 
   /* ---- User dropdown items ---- */
   const dropdownItems: DropdownItem[] = [
-    { label: 'セキュリティ設定', icon: '🔒', onClick: configureMFA },
+    ...(isAdmin
+      ? [{ label: 'セキュリティ設定', icon: '🔒', onClick: () => navigate('/security') }]
+      : [{ label: 'セキュリティ設定', icon: '🔒', onClick: configureMFA }]),
     { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
   ]
 
@@ -105,11 +109,13 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Main — メインコンテンツは各アプリで実装 */}
+        {/* Main — メインコンテンツ */}
         <main style={{
           flex: 1, minWidth: 0,
           padding: isMobile ? '16px' : '32px 24px',
-        }} />
+        }}>
+          <MfaStatusCard />
+        </main>
       </div>
     </div>
   )
