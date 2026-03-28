@@ -1,21 +1,21 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 
 export default function Home() {
-  const { isAuthenticated, isLoading, login } = useAuth()
-  const navigate = useNavigate()
+  const { login } = useAuth()
   const loginCalled = useRef(false)
 
   useEffect(() => {
-    if (isLoading) return
-    if (isAuthenticated) {
-      navigate('/dashboard', { replace: true })
-    } else if (!loginCalled.current) {
+    // /（ログインページ）に到達したら常に login() を呼ぶ。
+    // login() は prompt=login を渡すため、localStorage に有効なトークンが残っていても
+    // Keycloak は必ず再認証（パスワード + MFA）を要求する。
+    // isAuthenticated チェックによる「ダッシュボードへのショートカット」は
+    // MFA ゲートを回避してしまうため使用しない。
+    if (!loginCalled.current) {
       loginCalled.current = true
       login()
     }
-  }, [isLoading, isAuthenticated, login, navigate])
+  }, [login])
 
   return <div className="loading">認証中...</div>
 }
