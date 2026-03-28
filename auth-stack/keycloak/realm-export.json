@@ -586,7 +586,7 @@
     },
     {
       "alias": "unified-mfa-browser mfa-gate",
-      "description": "MFA gate: check mfa_enabled attribute",
+      "description": "MFA gate: check mfa_enabled and mfa_method, then OTP",
       "providerId": "basic-flow",
       "topLevel": false,
       "builtIn": false,
@@ -598,29 +598,15 @@
           "priority": 10
         },
         {
-          "flowAlias": "unified-mfa-browser totp-subflow",
-          "requirement": "CONDITIONAL",
-          "priority": 20
-        }
-      ]
-    },
-    {
-      "alias": "unified-mfa-browser totp-subflow",
-      "description": "TOTP branch: check mfa_method=totp",
-      "providerId": "basic-flow",
-      "topLevel": false,
-      "builtIn": false,
-      "authenticationExecutions": [
-        {
           "authenticator": "conditional-user-attribute",
           "authenticatorConfig": "mfa-totp-condition",
           "requirement": "REQUIRED",
-          "priority": 10
+          "priority": 20
         },
         {
           "authenticator": "auth-otp-form",
           "requirement": "REQUIRED",
-          "priority": 20
+          "priority": 30
         }
       ]
     }

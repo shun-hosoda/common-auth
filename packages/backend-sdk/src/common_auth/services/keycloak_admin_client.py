@@ -205,6 +205,19 @@ class KeycloakAdminClient:
                 )
                 del_resp.raise_for_status()
 
+    async def logout_user(self, user_id: str) -> None:
+        """
+        Delete all active Keycloak SSO sessions for the user.
+
+        After calling this, the user must re-authenticate on their next request.
+        This is called after MFA is enabled/changed so users are forced to go
+        through the full authentication flow (including the MFA gate) on next login.
+        """
+        resp = await self._request("POST", f"/users/{user_id}/logout")
+        # 204 = success, 404 = user has no active sessions (OK to ignore)
+        if resp.status_code not in (204, 404):
+            resp.raise_for_status()
+
     async def get_user_credentials(self, user_id: str) -> list[dict[str, Any]]:
         """Return the credential list for a user."""
         resp = await self._request("GET", f"/users/{user_id}/credentials")

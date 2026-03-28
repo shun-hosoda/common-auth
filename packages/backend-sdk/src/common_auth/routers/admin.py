@@ -426,6 +426,20 @@ async def update_mfa_settings(
             user_ids, "CONFIGURE_TOTP"
         )
 
+    # ── 7. Invalidate active sessions for all affected users ──────────────
+    # When MFA is enabled or method changes, force re-authentication so users
+    # must go through the full Keycloak authentication flow (including MFA gate)
+    # on their next login. Without this, users with active sessions bypass MFA.
+    if new_enabled or method_changed:
+        async def _logout_one(uid: str) -> None:
+            async with _MFA_SEMAPHORE:
+                await kc.logout_user(uid)
+
+        await asyncio.gather(
+            *[_logout_one(uid) for uid in user_ids],
+            return_exceptions=True,   # ignore individual logout failures
+        )
+
     # Merge failures (deduplicate)
     all_failed = list(set(failed_attr) | set(failed_action) | set(reset_failed))
     users_updated = len(user_ids) - len(all_failed)
