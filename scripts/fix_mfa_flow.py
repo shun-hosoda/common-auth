@@ -80,7 +80,7 @@ def main():
 
     # 2. Configure it
     print("[2] mfa_method==totp 設定...")
-    apost(t, f"/authentication/executions/{nc['id']}/config", {"alias":"mfa-method-totp","config":{"attribute_name":"mfa_method","not":"false","expected_attribute_value":"totp"}})
+    apost(t, f"/authentication/executions/{nc['id']}/config", {"alias":"mfa-method-totp","config":{"attribute_name":"mfa_method","not":"false","attribute_expected_value":"totp"}})
 
     # 3. Set REQUIRED
     print("[3] REQUIRED に設定...")

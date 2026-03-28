@@ -391,6 +391,45 @@ Get-Content examples/fastapi-app/.env | Select-String "KC_ADMIN"
 
 ---
 
+### P7: MFA有効なのにOTPが表示されない（CONDITIONAL subflowスキップ）
+
+**症状**: テナントMFAを有効化しOTPを登録済みなのに、ログイン時にOTPを聞かれずダッシュボードに遷移する
+
+**根本原因**: `realm-export.json` の `authenticatorConfig` で `conditional-user-attribute` の設定キー名が誤っていた。
+Keycloak 24 の正しいキー名は `attribute_expected_value` だが、`expected_attribute_value` と記述されていた。
+条件プロバイダーが比較値を読めず常に FALSE を返すため、CONDITIONAL subflow 全体がスキップされていた。
+
+**診断コマンド**:
+```powershell
+$t = (Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/realms/master/protocol/openid-connect/token' -Body @{grant_type='password';client_id='admin-cli';username='admin';password='admin'}).access_token
+$execs = Invoke-RestMethod -Uri 'http://localhost:8080/admin/realms/common-auth/authentication/flows/unified-mfa-browser%20mfa-gate/executions' -Headers @{Authorization="Bearer $t"}
+foreach ($e in $execs) {
+    if ($e.authenticationConfig) {
+        $cfg = Invoke-RestMethod -Uri "http://localhost:8080/admin/realms/common-auth/authentication/config/$($e.authenticationConfig)" -Headers @{Authorization="Bearer $t"}
+        Write-Host "$($cfg.alias): $($cfg.config | ConvertTo-Json -Compress)"
+    }
+}
+# ✅ 正常: "attribute_expected_value":"true" (attribute_ で始まる)
+# ❌ 異常: "expected_attribute_value":"true" (expected_ で始まる)
+```
+
+**自己修正コマンド**:
+```powershell
+# config IDを取得して正しいキー名で更新
+$configs = @(
+    @{id=$execs[0].authenticationConfig; alias='mfa-gate-condition'; config=@{attribute_name='mfa_enabled'; attribute_expected_value='true'; not='false'}},
+    @{id=$execs[1].authenticationConfig; alias='mfa-method-totp'; config=@{attribute_name='mfa_method'; attribute_expected_value='totp'; not='false'}}
+)
+foreach ($c in $configs) {
+    Invoke-RestMethod -Method Put -Uri "http://localhost:8080/admin/realms/common-auth/authentication/config/$($c.id)" -Headers @{Authorization="Bearer $t"; 'Content-Type'='application/json'} -Body ($c | ConvertTo-Json -Depth 5)
+}
+Write-Host 'Fixed. ブラウザで再ログインしてください。'
+```
+
+**恒久対策済み**: `auth-stack/keycloak/realm-export.json` の設定キーを `attribute_expected_value` に修正済み。
+
+---
+
 ### 起動前セルフチェックリスト
 
 作業開始時に以下を確認すること:

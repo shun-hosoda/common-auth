@@ -616,7 +616,7 @@
       "alias": "mfa-gate-condition",
       "config": {
         "attribute_name": "mfa_enabled",
-        "expected_attribute_value": "true",
+        "attribute_expected_value": "true",
         "not": "false"
       }
     },
@@ -624,7 +624,7 @@
       "alias": "mfa-totp-condition",
       "config": {
         "attribute_name": "mfa_method",
-        "expected_attribute_value": "totp",
+        "attribute_expected_value": "totp",
         "not": "false"
       }
     }

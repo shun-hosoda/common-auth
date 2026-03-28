@@ -310,7 +310,7 @@ Keycloakは `CONFIGURE_TOTP` Required Action が付与されたユーザーの�
       "alias": "mfa-gate-condition",
       "config": {
         "attribute_name": "mfa_enabled",
-        "expected_attribute_value": "true",
+        "attribute_expected_value": "true",
         "not": "false"
       }
     },
@@ -318,7 +318,7 @@ Keycloakは `CONFIGURE_TOTP` Required Action が付与されたユーザーの�
       "alias": "mfa-totp-condition",
       "config": {
         "attribute_name": "mfa_method",
-        "expected_attribute_value": "totp",
+        "attribute_expected_value": "totp",
         "not": "false"
       }
     }
