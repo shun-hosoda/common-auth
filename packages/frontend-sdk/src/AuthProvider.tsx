@@ -112,7 +112,16 @@ export function AuthProvider({
   const logout = useCallback(async () => {
     try {
       setError(null);
-      await userManager.signoutRedirect();
+      // ローカルセッション（localStorage）を先に削除し、
+      // Keycloak 側のセッション削除に失敗しても確実にログアウトした状態にする
+      const currentUser = await userManager.getUser();
+      await userManager.removeUser();
+      setUser(null);
+      // end_session_endpoint に id_token_hint を渡して SSO セッションを即座に無効化。
+      // Keycloak 25+ は id_token_hint なしだと確認ページを表示してセッションが残ることがある。
+      await userManager.signoutRedirect({
+        id_token_hint: currentUser?.id_token,
+      });
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Logout failed"));
       throw err;
