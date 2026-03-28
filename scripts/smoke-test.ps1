@@ -19,6 +19,10 @@
 
 .NOTES
     Exit code 0 = all passed, 1 = one or more failures.
+
+    ⚠️  WARNING: This script is for LOCAL DEVELOPMENT ONLY.
+    Do NOT run against production or staging environments.
+    Credentials in -Username / -Password are test-only defaults.
 #>
 
 param(

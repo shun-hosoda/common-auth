@@ -172,11 +172,6 @@ class KeycloakAdminClient:
 
     async def update_user(self, user_id: str, payload: dict[str, Any]) -> None:
         resp = await self._request("PUT", f"/users/{user_id}", json=payload)
-        if resp.status_code >= 400:
-            logger.warning(
-                "update_user %s returned %s: %s",
-                user_id, resp.status_code, resp.text,
-            )
         resp.raise_for_status()
 
     async def disable_user(self, user_id: str) -> None:

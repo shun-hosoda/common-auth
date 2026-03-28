@@ -22,6 +22,7 @@ from common_auth.setup import setup_auth
 # ── Expected routes from the frontend (adminApi.ts + vite proxy) ──────────────
 # Format: (method, path)
 # These MUST match what the React app actually calls.
+# Keep in sync with: examples/react-app/src/api/adminApi.ts
 
 EXPECTED_ROUTES: list[tuple[str, str]] = [
     # admin router (prefix /api/admin)
@@ -60,6 +61,14 @@ def wired_app() -> FastAPI:
     return app
 
 
+# Prefixes that are allowed in this backend. Any route outside these
+# must be explicitly added here (e.g. /health, /metrics).
+ALLOWED_PREFIXES: tuple[str, ...] = ("/api/admin", "/auth")
+
+# Internal FastAPI routes that are always present and can be ignored.
+_INTERNAL_PATHS = frozenset({"/", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"})
+
+
 class TestRouteContract:
     """Verify every frontend-expected route is registered in the backend."""
 
@@ -82,15 +91,18 @@ class TestRouteContract:
         )
 
     def test_no_route_prefix_drift(self, wired_app: FastAPI) -> None:
-        """Admin routes must start with /api/admin, auth routes with /auth."""
+        """All non-internal routes must start with one of ALLOWED_PREFIXES.
+
+        If a new top-level prefix is intentionally added (e.g. /health),
+        add it to the ALLOWED_PREFIXES constant at the top of this file.
+        """
         for route in wired_app.routes:
             if not hasattr(route, "path"):
                 continue
             path: str = route.path
-            # Skip root / and openapi internal routes
-            if path in ("/", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"):
+            if path in _INTERNAL_PATHS:
                 continue
-            assert path.startswith(("/api/admin", "/auth")), (
-                f"Route {path} does not match expected prefixes /api/admin or /auth. "
-                f"If this is intentional, add it to the prefix allowlist."
+            assert path.startswith(ALLOWED_PREFIXES), (
+                f"Route {path!r} does not start with any of {ALLOWED_PREFIXES}. "
+                f"If intentional, add the prefix to ALLOWED_PREFIXES."
             )

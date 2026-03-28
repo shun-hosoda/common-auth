@@ -47,9 +47,6 @@ export default function MfaStatusCard() {
 
   if (!status) return null
 
-  // MFA disabled → hide card entirely
-  if (!status.mfa_enabled) return null
-
   // Determine visual state
   let icon: string
   let label: string
@@ -58,7 +55,14 @@ export default function MfaStatusCard() {
   let textColor: string
   let borderColor: string
 
-  if (!status.mfa_configured) {
+  if (!status.mfa_enabled) {
+    icon = '🔓'
+    label = 'MFA 無効'
+    description = 'テナントでMFAは有効化されていません'
+    bgColor = '#f8fafc'
+    textColor = t.textMuted
+    borderColor = t.border
+  } else if (!status.mfa_configured) {
     icon = '⚠️'
     label = 'MFA 要設定'
     description = 'MFAが有効ですが、まだ設定が完了していません。次回ログイン時に設定を求められます。'
