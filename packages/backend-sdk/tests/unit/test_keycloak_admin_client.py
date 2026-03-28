@@ -379,6 +379,50 @@ class TestAddRequiredActionBulk:
         put_requests = [r for r in httpx_mock.get_requests() if r.method == "PUT"]
         assert len(put_requests) == 0
 
+    async def test_preserves_user_attributes(
+        self, kc: KeycloakAdminClient, httpx_mock: HTTPXMock
+    ) -> None:
+        """Keycloak PUT /users/{id} は full replace のため、
+        add_required_action_bulk は attributes を含む完全なオブジェクトを
+        PUT しなければならない（部分オブジェクトだと attributes が消える）。
+
+        Regression test for bug: partial PUT {"requiredActions": [...]} が
+        直前に set_user_attributes_bulk で設定した mfa_enabled 属性を上書きしていた。
+        """
+        httpx_mock.add_response(
+            url=f"{ADMIN_BASE}/users/user-1",
+            method="GET",
+            json={
+                "id": "user-1",
+                "username": "u1@example.com",
+                "requiredActions": [],
+                "attributes": {
+                    "tenant_id": ["acme-corp"],
+                    "mfa_enabled": ["true"],  # set_user_attributes_bulk 済み想定
+                    "mfa_method": ["totp"],
+                },
+            },
+        )
+        httpx_mock.add_response(
+            url=f"{ADMIN_BASE}/users/user-1",
+            method="PUT",
+            status_code=204,
+        )
+
+        await kc.add_required_action_bulk(["user-1"], "CONFIGURE_TOTP")
+
+        put_req = [r for r in httpx_mock.get_requests() if r.method == "PUT"][-1]
+        body = json.loads(put_req.content)
+
+        # requiredActions が追加されている
+        assert "CONFIGURE_TOTP" in body["requiredActions"]
+        # username など他フィールドも保持されている
+        assert body["username"] == "u1@example.com"
+        # mfa_enabled 属性が維持されている（回帰確認）
+        assert body["attributes"]["mfa_enabled"] == ["true"]
+        assert body["attributes"]["mfa_method"] == ["totp"]
+        assert body["attributes"]["tenant_id"] == ["acme-corp"]
+
     async def test_one_failure_returns_failed_list(
         self, kc: KeycloakAdminClient, httpx_mock: HTTPXMock
     ) -> None:
@@ -464,6 +508,44 @@ class TestRemoveRequiredActionBulk:
         # Verify no PUT was issued (action absent → skip)
         put_requests = [r for r in httpx_mock.get_requests() if r.method == "PUT"]
         assert len(put_requests) == 0
+
+    async def test_preserves_user_attributes(
+        self, kc: KeycloakAdminClient, httpx_mock: HTTPXMock
+    ) -> None:
+        """remove_required_action_bulk も full user object を PUT すること（回帰確認）。"""
+        httpx_mock.add_response(
+            url=f"{ADMIN_BASE}/users/user-1",
+            method="GET",
+            json={
+                "id": "user-1",
+                "username": "u1@example.com",
+                "requiredActions": ["CONFIGURE_TOTP", "VERIFY_EMAIL"],
+                "attributes": {
+                    "tenant_id": ["acme-corp"],
+                    "mfa_enabled": ["false"],
+                    "mfa_method": ["totp"],
+                },
+            },
+        )
+        httpx_mock.add_response(
+            url=f"{ADMIN_BASE}/users/user-1",
+            method="PUT",
+            status_code=204,
+        )
+
+        await kc.remove_required_action_bulk(["user-1"], "CONFIGURE_TOTP")
+
+        put_req = [r for r in httpx_mock.get_requests() if r.method == "PUT"][-1]
+        body = json.loads(put_req.content)
+
+        # CONFIGURE_TOTP が削除され VERIFY_EMAIL は残る
+        assert "CONFIGURE_TOTP" not in body["requiredActions"]
+        assert "VERIFY_EMAIL" in body["requiredActions"]
+        # username など他フィールドも保持されている
+        assert body["username"] == "u1@example.com"
+        # attributes が維持されている（回帰確認）
+        assert body["attributes"]["mfa_enabled"] == ["false"]
+        assert body["attributes"]["tenant_id"] == ["acme-corp"]
 
     async def test_one_failure_returns_failed_list(
         self, kc: KeycloakAdminClient, httpx_mock: HTTPXMock

@@ -304,6 +304,11 @@ class KeycloakAdminClient:
         """Add *action* to each user's requiredActions (skip if already present).
 
         Returns a list of user IDs that **failed** to update.
+
+        NOTE: Keycloak's PUT /users/{id} is a **full replace**.  Sending a
+        partial payload (e.g. only ``requiredActions``) resets all other
+        fields – including ``attributes`` – to empty.  We therefore always
+        PUT the complete user representation.
         """
         failed: list[str] = []
         for uid in user_ids:
@@ -312,7 +317,8 @@ class KeycloakAdminClient:
                 actions: list[str] = user.get("requiredActions") or []
                 if action not in actions:
                     actions.append(action)
-                    await self.update_user(uid, {"requiredActions": actions})
+                    user["requiredActions"] = actions
+                    await self.update_user(uid, user)
             except Exception:
                 logger.warning("Failed to add required action for user %s", uid, exc_info=True)
                 failed.append(uid)
@@ -326,6 +332,8 @@ class KeycloakAdminClient:
         """Remove *action* from each user's requiredActions (skip if absent).
 
         Returns a list of user IDs that **failed** to update.
+
+        NOTE: Same full-replace caveat as ``add_required_action_bulk``.
         """
         failed: list[str] = []
         for uid in user_ids:
@@ -334,7 +342,8 @@ class KeycloakAdminClient:
                 actions: list[str] = user.get("requiredActions") or []
                 if action in actions:
                     actions.remove(action)
-                    await self.update_user(uid, {"requiredActions": actions})
+                    user["requiredActions"] = actions
+                    await self.update_user(uid, user)
             except Exception:
                 logger.warning("Failed to remove required action for user %s", uid, exc_info=True)
                 failed.append(uid)

@@ -398,18 +398,30 @@
           "name": "acme-corp",
           "path": "/tenants/acme-corp",
           "attributes": {
-            "tenant_id": ["acme-corp"],
-            "mfa_enabled": ["false"],
-            "mfa_method": ["totp"]
+            "tenant_id": [
+              "acme-corp"
+            ],
+            "mfa_enabled": [
+              "false"
+            ],
+            "mfa_method": [
+              "totp"
+            ]
           }
         },
         {
           "name": "globex-inc",
           "path": "/tenants/globex-inc",
           "attributes": {
-            "tenant_id": ["globex-inc"],
-            "mfa_enabled": ["false"],
-            "mfa_method": ["totp"]
+            "tenant_id": [
+              "globex-inc"
+            ],
+            "mfa_enabled": [
+              "false"
+            ],
+            "mfa_method": [
+              "totp"
+            ]
           }
         }
       ]
@@ -424,7 +436,9 @@
       "firstName": "Test",
       "lastName": "User",
       "attributes": {
-        "tenant_id": ["acme-corp"]
+        "tenant_id": [
+          "acme-corp"
+        ]
       },
       "credentials": [
         {
@@ -448,7 +462,9 @@
       "firstName": "Tenant",
       "lastName": "Admin",
       "attributes": {
-        "tenant_id": ["acme-corp"]
+        "tenant_id": [
+          "acme-corp"
+        ]
       },
       "credentials": [
         {
@@ -473,7 +489,9 @@
       "firstName": "Test",
       "lastName": "User2",
       "attributes": {
-        "tenant_id": ["globex-inc"]
+        "tenant_id": [
+          "globex-inc"
+        ]
       },
       "credentials": [
         {
@@ -497,7 +515,9 @@
       "firstName": "Tenant",
       "lastName": "Admin",
       "attributes": {
-        "tenant_id": ["globex-inc"]
+        "tenant_id": [
+          "globex-inc"
+        ]
       },
       "credentials": [
         {
@@ -666,8 +686,14 @@
     "starttls": "false"
   },
   "internationalizationEnabled": false,
-  "supportedLocales": ["en"],
+  "supportedLocales": [
+    "en"
+  ],
   "defaultLocale": "en",
-  "defaultRoles": ["offline_access", "uma_authorization", "user"]
+  "defaultRoles": [
+    "offline_access",
+    "uma_authorization",
+    "user"
+  ],
+  "userProfileConfig": "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"tenant_id\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"mfa_enabled\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"mfa_method\", \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}]}"
 }
-

@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    strictPort: true, // 3000が使用中なら即エラー（サイレントフォールバック防止）
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
