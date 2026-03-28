@@ -102,7 +102,11 @@ export function AuthProvider({
   const login = useCallback(async () => {
     try {
       setError(null);
-      await userManager.signinRedirect();
+      // prompt=login: 有効な SSO セッション（Cookie）があっても Keycloak に強制再認証させる。
+      // これにより MFA が有効なユーザーは毎回ログイン時に OTP を求められる。
+      // （SSO Cookie がある場合、Cookie 認証ステップで認証が完了して MFA フローが
+      //   スキップされてしまうのを防ぐ）
+      await userManager.signinRedirect({ prompt: "login" });
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Login failed"));
       throw err;
