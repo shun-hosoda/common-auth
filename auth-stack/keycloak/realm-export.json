@@ -561,7 +561,8 @@
         {
           "flowAlias": "unified-mfa-browser forms",
           "requirement": "ALTERNATIVE",
-          "priority": 20
+          "priority": 20,
+          "authenticatorFlow": true
         }
       ]
     },
@@ -580,7 +581,8 @@
         {
           "flowAlias": "unified-mfa-browser mfa-gate",
           "requirement": "CONDITIONAL",
-          "priority": 20
+          "priority": 20,
+          "authenticatorFlow": true
         }
       ]
     },

@@ -53,6 +53,9 @@ logs/
 *.tfstate.*
 .terraform.lock.hcl
 
+# Java バイナリ（Keycloak theme JAR 等、リポジトリに含めない）
+*.jar
+
 # ⚠️ シークレット管理: 実際の環境変数ファイルは絶対にコミットしない
 infra/.env
 infra/**/.env

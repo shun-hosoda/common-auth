@@ -53,9 +53,11 @@ DROP POLICY IF EXISTS tenant_isolation_policy ON user_profiles;
 CREATE POLICY tenant_isolation_policy ON user_profiles
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
 
--- Insert sample tenant for testing
-INSERT INTO tenants (id, realm_name, display_name) 
-VALUES ('00000000-0000-0000-0000-000000000001', 'common-auth', 'Common Auth Test Tenant')
+-- テストテナント（common-auth / acme-corp / globex-inc）
+INSERT INTO tenants (id, realm_name, display_name) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'common-auth', 'Common Auth Test Tenant'),
+    ('00000000-0000-0000-0000-000000000002', 'acme-corp',   'Acme Corp'),
+    ('00000000-0000-0000-0000-000000000003', 'globex-inc',  'Globex Inc')
 ON CONFLICT (realm_name) DO NOTHING;
 
 -- =============================================================
@@ -263,10 +265,148 @@ WHERE (gp.expires_at IS NULL OR gp.expires_at > NOW())
 )
 GROUP BY ugm.user_id, p.tenant_id, p.resource, p.action;
 
+-- =============================================================
+-- テストデータ: グループ
+-- =============================================================
+
+-- acme-corp のグループ
+INSERT INTO tenant_groups (id, tenant_id, name, description, sort_order) VALUES
+    ('10000000-0000-0000-0000-000000000001',
+     '00000000-0000-0000-0000-000000000002',
+     '管理部', 'テナント管理・総務', 1),
+    ('10000000-0000-0000-0000-000000000002',
+     '00000000-0000-0000-0000-000000000002',
+     '開発チーム', 'プロダクト開発・エンジニアリング', 2),
+    ('10000000-0000-0000-0000-000000000003',
+     '00000000-0000-0000-0000-000000000002',
+     '営業部', '営業・カスタマーサクセス', 3)
+ON CONFLICT (id) DO NOTHING;
+
+-- globex-inc のグループ
+INSERT INTO tenant_groups (id, tenant_id, name, description, sort_order) VALUES
+    ('10000000-0000-0000-0000-000000000011',
+     '00000000-0000-0000-0000-000000000003',
+     '管理部', 'テナント管理・総務', 1),
+    ('10000000-0000-0000-0000-000000000012',
+     '00000000-0000-0000-0000-000000000003',
+     '開発チーム', 'プロダクト開発・エンジニアリング', 2),
+    ('10000000-0000-0000-0000-000000000013',
+     '00000000-0000-0000-0000-000000000003',
+     '営業部', '営業・カスタマーサクセス', 3)
+ON CONFLICT (id) DO NOTHING;
+
+-- =============================================================
+-- テストデータ: グループ権限
+-- 管理部 → 全権限、開発チーム → users/reports 参照のみ
+-- =============================================================
+INSERT INTO group_permissions (group_id, permission_id)
+    SELECT '10000000-0000-0000-0000-000000000001', id FROM permissions WHERE tenant_id IS NULL
+ON CONFLICT (group_id, permission_id) DO NOTHING;
+
+INSERT INTO group_permissions (group_id, permission_id)
+    SELECT '10000000-0000-0000-0000-000000000011', id FROM permissions WHERE tenant_id IS NULL
+ON CONFLICT (group_id, permission_id) DO NOTHING;
+
+INSERT INTO group_permissions (group_id, permission_id)
+    SELECT '10000000-0000-0000-0000-000000000002', id
+    FROM permissions WHERE tenant_id IS NULL AND resource IN ('users', 'reports') AND action = 'read'
+ON CONFLICT (group_id, permission_id) DO NOTHING;
+
+INSERT INTO group_permissions (group_id, permission_id)
+    SELECT '10000000-0000-0000-0000-000000000012', id
+    FROM permissions WHERE tenant_id IS NULL AND resource IN ('users', 'reports') AND action = 'read'
+ON CONFLICT (group_id, permission_id) DO NOTHING;
+
+-- =============================================================
+-- テストデータ: ユーザー⇔グループ紐付け
+-- NOTE: user_profiles は Keycloak ログイン時に Lazy Sync されるため、
+--       初回 Docker 起動時は 0 行 INSERT になる（エラーにはならない）。
+--       下記トリガー (trg_auto_assign_test_groups) により、
+--       ユーザーが初回ログインして user_profiles が INSERT された時点で
+--       自動的にグループへ紐付けられる。
+-- =============================================================
+
+-- テスト用自動グループ割り当てトリガー関数
+-- ⚠️  WARNING: TEST-ONLY FUNCTION. DO NOT APPLY TO PRODUCTION.
+--              email プレフィックスでグループ割り当てを決定するのは
+--              本番環境におけるアンチパターンです。
+--              本番DBへのマイグレーション時はこの関数を含めないこと。
+CREATE OR REPLACE FUNCTION fn_auto_assign_test_groups()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    -- acme-corp: admin系 → 管理部、それ以外 → 開発チーム
+    IF NEW.tenant_id = '00000000-0000-0000-0000-000000000002' THEN
+        IF NEW.email LIKE 'admin_%' THEN
+            INSERT INTO user_group_memberships (user_id, group_id)
+            VALUES (NEW.id, '10000000-0000-0000-0000-000000000001')
+            ON CONFLICT (user_id, group_id) DO NOTHING;
+        ELSE
+            INSERT INTO user_group_memberships (user_id, group_id)
+            VALUES (NEW.id, '10000000-0000-0000-0000-000000000002')
+            ON CONFLICT (user_id, group_id) DO NOTHING;
+        END IF;
+    -- globex-inc: admin系 → 管理部、それ以外 → 営業部
+    ELSIF NEW.tenant_id = '00000000-0000-0000-0000-000000000003' THEN
+        IF NEW.email LIKE 'admin_%' THEN
+            INSERT INTO user_group_memberships (user_id, group_id)
+            VALUES (NEW.id, '10000000-0000-0000-0000-000000000011')
+            ON CONFLICT (user_id, group_id) DO NOTHING;
+        ELSE
+            INSERT INTO user_group_memberships (user_id, group_id)
+            VALUES (NEW.id, '10000000-0000-0000-0000-000000000013')
+            ON CONFLICT (user_id, group_id) DO NOTHING;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_auto_assign_test_groups ON user_profiles;
+CREATE TRIGGER trg_auto_assign_test_groups
+    AFTER INSERT ON user_profiles
+    FOR EACH ROW EXECUTE FUNCTION fn_auto_assign_test_groups();
+
+-- 既存 user_profiles に対して手動で実行（再起動後に残っていた場合の補完）
+-- NOTE: docker-compose down -v 後の初回起動時は user_profiles が空のため
+--       以下の INSERT は 0行になる（エラーにはならない）。
+--       データが残っている場合（ボリューム保持）の補完用途。
+DO $$
+BEGIN
+    INSERT INTO user_group_memberships (user_id, group_id)
+        SELECT up.id, '10000000-0000-0000-0000-000000000001'
+        FROM user_profiles up
+        WHERE up.email = 'admin_acme-corp@example.com'
+          AND up.tenant_id = '00000000-0000-0000-0000-000000000002'
+        ON CONFLICT (user_id, group_id) DO NOTHING;
+
+    INSERT INTO user_group_memberships (user_id, group_id)
+        SELECT up.id, '10000000-0000-0000-0000-000000000002'
+        FROM user_profiles up
+        WHERE up.email = 'testuser_acme-corp@example.com'
+          AND up.tenant_id = '00000000-0000-0000-0000-000000000002'
+        ON CONFLICT (user_id, group_id) DO NOTHING;
+
+    INSERT INTO user_group_memberships (user_id, group_id)
+        SELECT up.id, '10000000-0000-0000-0000-000000000011'
+        FROM user_profiles up
+        WHERE up.email = 'admin_globex-inc@example.com'
+          AND up.tenant_id = '00000000-0000-0000-0000-000000000003'
+        ON CONFLICT (user_id, group_id) DO NOTHING;
+
+    INSERT INTO user_group_memberships (user_id, group_id)
+        SELECT up.id, '10000000-0000-0000-0000-000000000013'
+        FROM user_profiles up
+        WHERE up.email = 'testuser_globex-inc@example.com'
+          AND up.tenant_id = '00000000-0000-0000-0000-000000000003'
+        ON CONFLICT (user_id, group_id) DO NOTHING;
+END $$;
+
 -- Log initialization
 DO $$
 BEGIN
     RAISE NOTICE 'Application database initialized successfully';
-    RAISE NOTICE 'Tables created: tenants, user_profiles, tenant_groups, user_group_memberships, permissions, group_permissions, user_permissions';
+    RAISE NOTICE 'Tenants: common-auth / acme-corp / globex-inc';
+    RAISE NOTICE 'Tables: tenants, user_profiles, tenant_groups, user_group_memberships, permissions, group_permissions, user_permissions';
+    RAISE NOTICE 'Groups: acme-corp(管理部/開発チーム/営業部), globex-inc(管理部/開発チーム/営業部)';
     RAISE NOTICE 'Row-Level Security enabled on all tables';
 END $$;

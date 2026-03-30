@@ -74,9 +74,28 @@ docker-compose up -d
 ## アプリケーションデータベース
 
 `app-db` サービスは、テスト用のPostgreSQLインスタンスを提供します：
-- 事前作成テーブル: `tenants`, `user_profiles`
-- Row-Level Security有効化
-- サンプルテナント: `common-auth`
+- 事前作成テーブル: `tenants`, `user_profiles`, `tenant_groups`, `user_group_memberships`, `permissions`, `group_permissions`, `user_permissions`
+- Row-Level Security有効化（全テーブル）
+- サンプルテナント: `common-auth` / `acme-corp` / `globex-inc`
+
+**テストグループ（初期データ）:**
+
+| テナント | グループ | 付与権限 |
+|----------|---------|---------|
+| acme-corp | 管理部 | 全権限 |
+| acme-corp | 開発チーム | users/reports 参照のみ |
+| acme-corp | 営業部 | （権限なし） |
+| globex-inc | 管理部 | 全権限 |
+| globex-inc | 開発チーム | users/reports 参照のみ |
+| globex-inc | 営業部 | （権限なし） |
+
+**ユーザー⇔グループ紐付け:**
+- `admin_acme-corp@example.com` → 管理部（acme-corp）
+- `testuser_acme-corp@example.com` → 開発チーム（acme-corp）
+- `admin_globex-inc@example.com` → 管理部（globex-inc）
+- `testuser_globex-inc@example.com` → 営業部（globex-inc）
+
+> **注意**: ユーザー⇔グループの紐付けは `user_profiles` が Keycloak ログイン時に同期されるタイミングで自動実行されます（`trg_auto_assign_test_groups` トリガー）。各ユーザーが一度ログインすると即時にグループへ追加されます。
 
 接続方法:
 ```bash
