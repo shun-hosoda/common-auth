@@ -13,7 +13,7 @@ import {
 
 /* ─── Dashboard (main) ──────────────────────────────────── */
 export default function Dashboard() {
-  const { user, logout, configureMFA, hasRole } = useAuth()
+  const { user, logout, hasRole } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -42,9 +42,7 @@ export default function Dashboard() {
 
   /* ---- User dropdown items ---- */
   const dropdownItems: DropdownItem[] = [
-    ...(isAdmin
-      ? [{ label: 'セキュリティ設定', icon: '🔒', onClick: () => navigate('/security') }]
-      : [{ label: 'セキュリティ設定', icon: '🔒', onClick: configureMFA }]),
+    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
     { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
   ]
 
@@ -113,7 +111,6 @@ export default function Dashboard() {
           flex: 1, minWidth: 0,
           padding: isMobile ? '16px' : '32px 24px',
         }}>
-          {/* メインコンテンツをここに追加 */}
         </main>
       </div>
     </div>

@@ -66,7 +66,7 @@ const toEditForm = (u: AdminUser): EditForm => ({
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
-  const { user, logout, configureMFA, hasRole, getAccessToken } = useAuth()
+  const { user, logout, hasRole, getAccessToken } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -102,6 +102,7 @@ export default function AdminUsers() {
 
   const [mfaTarget,  setMfaTarget]  = useState<AdminUser | null>(null)
   const [mfaLoading, setMfaLoading] = useState(false)
+  const [openActionMenuUserId, setOpenActionMenuUserId] = useState<string | null>(null)
 
   const loaded = useRef(false)
 
@@ -125,6 +126,12 @@ export default function AdminUsers() {
     loaded.current = true
     fetchUsers()
   }, [fetchUsers])
+
+  useEffect(() => {
+    const close = () => setOpenActionMenuUserId(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [])
 
   // ── create ─────────────────────────────────────────────────────────────────
   const handleCreate = async () => {
@@ -241,9 +248,7 @@ export default function AdminUsers() {
   ]
 
   const dropdownItems: DropdownItem[] = [
-    ...(isAdmin
-      ? [{ label: 'セキュリティ設定', icon: '🔒', onClick: () => navigate('/security') }]
-      : [{ label: 'セキュリティ設定', icon: '🔒', onClick: configureMFA }]),
+    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
     { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
   ]
 
@@ -357,7 +362,7 @@ export default function AdminUsers() {
               </button>
             </div>
           ) : (
-            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: t.radiusLg, overflow: 'hidden', boxShadow: t.shadowSm }}>
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: t.radiusLg, boxShadow: t.shadowSm }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: t.bg }}>
@@ -398,15 +403,75 @@ export default function AdminUsers() {
                           </span>
                         </td>
                         <td style={{ padding: '12px 16px' }}>
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            {/* 編集 */}
-                            <button onClick={() => openEdit(u)} style={{ padding: '4px 10px', borderRadius: t.radiusMd, border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, background: t.bg, color: t.text }}>編集</button>
-                            {/* 有効/無効 */}
-                            <button onClick={() => toggleEnabled(u)} style={{ padding: '4px 10px', borderRadius: t.radiusMd, border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, background: u.enabled ? '#fee2e2' : '#dcfce7', color: u.enabled ? '#b91c1c' : '#15803d' }}>
-                              {u.enabled ? '無効化' : '有効化'}
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setOpenActionMenuUserId((current) => current === u.id ? null : u.id)
+                              }}
+                              style={{
+                                padding: '6px 10px', borderRadius: t.radiusMd,
+                                border: `1px solid ${t.border}`, background: t.surface,
+                                cursor: 'pointer', fontSize: '0.8rem', color: t.text,
+                              }}
+                              aria-haspopup="menu"
+                              aria-expanded={openActionMenuUserId === u.id}
+                            >
+                              操作 ▾
                             </button>
-                            {/* MFA リセット */}
-                            <button onClick={() => setMfaTarget(u)} style={{ padding: '4px 10px', borderRadius: t.radiusMd, border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, background: '#fef3c7', color: '#92400e' }}>MFAリセット</button>
+
+                            {openActionMenuUserId === u.id && (
+                              <div
+                                role="menu"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: 'absolute', right: 0, top: 'calc(100% + 6px)',
+                                  minWidth: 170, background: t.surface,
+                                  border: `1px solid ${t.border}`, borderRadius: t.radiusMd,
+                                  boxShadow: t.shadowSm, zIndex: 30, overflow: 'hidden',
+                                }}
+                              >
+                                <button
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setOpenActionMenuUserId(null)
+                                    openEdit(u)
+                                  }}
+                                  style={{
+                                    width: '100%', padding: '10px 12px', border: 'none',
+                                    background: t.surface, color: t.text, textAlign: 'left', cursor: 'pointer',
+                                  }}
+                                >
+                                  編集
+                                </button>
+                                <button
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setOpenActionMenuUserId(null)
+                                    toggleEnabled(u)
+                                  }}
+                                  style={{
+                                    width: '100%', padding: '10px 12px', border: 'none',
+                                    background: t.surface, color: u.enabled ? t.danger : t.primary, textAlign: 'left', cursor: 'pointer',
+                                  }}
+                                >
+                                  {u.enabled ? '無効化' : '有効化'}
+                                </button>
+                                <button
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setOpenActionMenuUserId(null)
+                                    setMfaTarget(u)
+                                  }}
+                                  style={{
+                                    width: '100%', padding: '10px 12px', border: 'none',
+                                    background: t.surface, color: t.text, textAlign: 'left', cursor: 'pointer',
+                                  }}
+                                >
+                                  MFAリセット
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -456,36 +521,36 @@ export default function AdminUsers() {
             <h2 style={{ margin: '0 0 1.5rem 0' }}>ユーザー追加</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>メールアドレス <span style={{ color: 'var(--danger)' }}>*</span></span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>メールアドレス <span style={{ color: t.danger }}>*</span></span>
                 <input type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                   placeholder="user@example.com"
-                  style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
               </label>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>姓</span>
                   <input type="text" value={createForm.lastName} onChange={(e) => setCreateForm((f) => ({ ...f, lastName: e.target.value }))}
                     placeholder="山田"
-                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
                 </label>
                 <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>名</span>
                   <input type="text" value={createForm.firstName} onChange={(e) => setCreateForm((f) => ({ ...f, firstName: e.target.value }))}
                     placeholder="太郎"
-                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
                 </label>
               </div>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>初期パスワード <span style={{ color: 'var(--danger)' }}>*</span></span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>初期パスワード <span style={{ color: t.danger }}>*</span></span>
                 <input type="password" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                   placeholder="8文字以上"
-                  style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={createForm.temporary} onChange={(e) => setCreateForm((f) => ({ ...f, temporary: e.target.checked }))} />
                 <span style={{ fontSize: '0.875rem' }}>一時パスワード（初回ログイン時に変更を要求）</span>
               </label>
-              {createError && <div style={{ color: 'var(--danger)', fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>{createError}</div>}
+              {createError && <div style={{ color: t.danger, fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>{createError}</div>}
             </div>
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
               <button onClick={() => setShowCreate(false)} disabled={creating}
@@ -508,21 +573,21 @@ export default function AdminUsers() {
               <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                 <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>メールアドレス</span>
                 <input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => f && ({ ...f, email: e.target.value }))}
-                  style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
               </label>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>姓</span>
                   <input type="text" value={editForm.lastName} onChange={(e) => setEditForm((f) => f && ({ ...f, lastName: e.target.value }))}
-                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
                 </label>
                 <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>名</span>
                   <input type="text" value={editForm.firstName} onChange={(e) => setEditForm((f) => f && ({ ...f, firstName: e.target.value }))}
-                    style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem' }} />
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
                 </label>
               </div>
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+              <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: '1rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: '0.75rem' }}>
                   <input type="checkbox" checked={editForm.resetPassword} onChange={(e) => setEditForm((f) => f && ({ ...f, resetPassword: e.target.checked }))} />
                   <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>パスワードをリセットする</span>
@@ -530,10 +595,10 @@ export default function AdminUsers() {
                 {editForm.resetPassword && (
                   <input type="password" value={editForm.newPassword} onChange={(e) => setEditForm((f) => f && ({ ...f, newPassword: e.target.value }))}
                     placeholder="新しいパスワード"
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid var(--border)', borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: '1rem', boxSizing: 'border-box' }} />
                 )}
               </div>
-              {editError && <div style={{ color: 'var(--danger)', fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>{editError}</div>}
+              {editError && <div style={{ color: t.danger, fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>{editError}</div>}
             </div>
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
               <button onClick={() => setEditTarget(null)} disabled={saving}

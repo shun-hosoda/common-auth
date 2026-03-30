@@ -191,21 +191,31 @@ async def create_user(
 
         # ── MFA extension: set MFA attrs for new user if tenant MFA is enabled ──
         if group:
-            full_group = await kc.get_group(group["id"])
-            group_attrs = full_group.get("attributes") or {}
-            mfa_enabled = group_attrs.get("mfa_enabled", ["false"])[0]
-            mfa_method = group_attrs.get("mfa_method", ["totp"])[0]
-            if mfa_enabled == "true":
-                await kc.update_user(new_id, {
-                    "attributes": {
-                        "tenant_id": [user.tenant_id],
-                        "mfa_enabled": ["true"],
-                        "mfa_method": [mfa_method],
-                    },
-                    "requiredActions": (
-                        ["CONFIGURE_TOTP"] if mfa_method == "totp" else []
-                    ),
-                })
+            try:
+                full_group = await kc.get_group(group["id"])
+                group_attrs = full_group.get("attributes") or {}
+                mfa_enabled = group_attrs.get("mfa_enabled", ["false"])[0]
+                mfa_method = group_attrs.get("mfa_method", ["totp"])[0]
+                if mfa_enabled == "true":
+                    # attributes と requiredActions を別々に更新（Keycloak 24 互換）
+                    await kc.update_user(new_id, {
+                        "attributes": {
+                            "tenant_id": [user.tenant_id],
+                            "mfa_enabled": ["true"],
+                            "mfa_method": [mfa_method],
+                        },
+                    })
+                    if mfa_method == "totp":
+                        # Fetch current user to merge requiredActions
+                        current = await kc.get_user(new_id)
+                        actions = list(set(current.get("requiredActions", []) + ["CONFIGURE_TOTP"]))
+                        await kc.update_user(new_id, {"requiredActions": actions})
+            except Exception:
+                logger.warning(
+                    "Failed to set MFA attributes for new user %s (best-effort)",
+                    new_id,
+                    exc_info=True,
+                )
 
     return {"id": new_id}
 

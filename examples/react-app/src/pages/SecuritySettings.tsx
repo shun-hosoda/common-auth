@@ -112,9 +112,7 @@ export default function SecuritySettings() {
   ]
 
   const dropdownItems: DropdownItem[] = [
-    ...(isAdmin
-      ? [{ label: 'セキュリティ設定', icon: '🔒', onClick: () => navigate('/security') }]
-      : []),
+    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
     { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
   ]
 

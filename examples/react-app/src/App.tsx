@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminClients from './pages/AdminClients'
 import SecuritySettings from './pages/SecuritySettings'
+import PersonalSecuritySettings from './pages/PersonalSecuritySettings'
 
 function App() {
   return (
@@ -51,6 +52,11 @@ function App() {
           }
         >
           <SecuritySettings />
+        </AuthGuard>
+      } />
+      <Route path="/me/security" element={
+        <AuthGuard fallback={<div className="loading">Loading...</div>}>
+          <PersonalSecuritySettings />
         </AuthGuard>
       } />
       <Route path="/admin/clients" element={

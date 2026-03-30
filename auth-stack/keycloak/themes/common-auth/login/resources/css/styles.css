@@ -282,6 +282,69 @@ a:hover {
   margin-bottom: 0.75rem;
 }
 
+/* Device label is optional metadata and not required for OTP verification */
+#kc-totp-settings-form label[for="userLabel"],
+#kc-totp-settings-form #userLabel,
+#kc-otp-login-form label[for="userLabel"],
+#kc-otp-login-form #userLabel {
+  display: none !important;
+}
+
+/* Hide unnecessary required-field asterisks (*) on TOTP setup form.
+   The form has only one input (OTP code) so the marker adds no value. */
+#kc-totp-settings-form .required {
+  display: none !important;
+}
+
+/* ── Error icon suppression ──────────────────────────────────────────────────
+   Keycloak の OTP 検証エラー時に inputへ大量に表示される！マークを非表示にする。
+   PF4/PF5 両方のクラス名とインラインSVGアイコンに対応。
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* PF4: validation status icon inside form controls */
+.pf-c-form-control__icon.pf-m-status,
+.pf-c-form-control__icon {
+  display: none !important;
+}
+
+/* PF5 variants (Keycloak 24+) */
+.pf-v5-c-form-control__icon,
+.pf-v5-c-form-control__utilities {
+  display: none !important;
+}
+
+/* Font Awesome / PatternFly icon classes used in error messages */
+.pficon-error-circle-o,
+.fa-exclamation-circle,
+.fas.fa-exclamation-circle,
+.fa-exclamation-triangle,
+.pf-c-alert__icon i,
+.kc-feedback-text .fa-exclamation-circle,
+.kc-feedback-text .pf-c-alert__icon {
+  display: none !important;
+}
+
+/* SVG exclamation icons rendered inline by PatternFly */
+.pf-c-form-control svg.pf-svg,
+.pf-v5-c-form-control svg {
+  display: none !important;
+}
+
+/* PF4 renders an exclamation-circle SVG as background-image on aria-invalid inputs.
+   Hide it so the OTP field does not show overlapping ! icons. */
+.pf-c-form-control[aria-invalid="true"],
+input.pf-c-form-control[aria-invalid="true"],
+#otp[aria-invalid="true"],
+#otp.pf-c-form-control[aria-invalid="true"] {
+  background-image: none !important;
+}
+
+/* Ensure OTP input does not show a red border double icon overlay */
+#otp::-ms-reveal,
+#otp::-ms-clear {
+  display: none;
+}
+
 /* ── Checkbox ───────────────────────────────────────────────────────────────── */
 
 input[type="checkbox"] {

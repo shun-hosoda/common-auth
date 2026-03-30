@@ -142,13 +142,18 @@ export function AuthProvider({
     window.location.href = resetUrl;
   }, [authority, clientId]);
 
-  const configureMFA = useCallback(() => {
+  const configureMFA = useCallback(async () => {
     if (!user) {
       throw new Error("User must be authenticated to configure MFA");
     }
-    const mfaUrl = `${authority}/account/totp`;
-    window.location.href = mfaUrl;
-  }, [authority, user]);
+    // userManager.signinRedirect 経由で kc_action=CONFIGURE_TOTP を送信する。
+    // これにより oidc-client-ts が state を sessionStorage に保存し、
+    // Keycloak からのリダイレクトバック時に Callback ページが正常に処理できる。
+    // 手動で URL を組み立てると state が保存されず Callback で失敗する。
+    await userManager.signinRedirect({
+      extraQueryParams: { kc_action: 'CONFIGURE_TOTP' },
+    });
+  }, [userManager, user]);
 
   const getAccessToken = useCallback(() => {
     return user?.access_token || null;
