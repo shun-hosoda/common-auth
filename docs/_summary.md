@@ -18,7 +18,7 @@
 | 2a | Rate Limiting, MFA, SMTP | ✅ 完了 |
 | 2b | Frontend SDK (React Hooks) | ✅ 完了 |
 | 3 | ユーザー管理UI (Custom React + Admin API), Keycloak Themes | ✅ 完了 |
-| 3.5 | テナントMFAポリシー管理 | 🚧 実装計画済み |
+| 3.5 | テナントMFAポリシー管理 | ✅ 完了 |
 
 ## 主要ADR
 
@@ -44,12 +44,14 @@ packages/backend-sdk/src/common_auth/
 ├── setup.py           # setup_auth() FastAPI統合
 ├── middleware/
 │   ├── jwt_auth.py    # JWT検証
-│   ├── rate_limit.py  # Rate Limiting
+│   ├── rate_limit.py  # Rate Limiting (Fixed-window counter)
 │   ├── tenant.py      # RLS SET LOCAL
 │   └── security_headers.py
 ├── services/jwks.py   # JWKS取得・キャッシュ
 ├── dependencies/      # FastAPI DI
-└── routers/auth.py    # /auth/health, /auth/me
+└── routers/
+    ├── auth.py        # /auth/health, /auth/me, /auth/logout, /auth/mfa-status
+    └── admin.py       # /api/admin/users (CRUD), /api/admin/security/mfa, /api/admin/clients
 ```
 
 ## 設定項目
@@ -67,9 +69,17 @@ TENANT_ID_CLAIM=tenant_id      # TENANT_ID_SOURCE=custom 時に必須
 # オプション
 JWKS_CACHE_TTL=86400
 ENABLE_RLS=true
+ENABLE_USER_SYNC=false
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_DEFAULT_REQUESTS=60
+RATE_LIMIT_DEFAULT_WINDOW=60
 RATE_LIMIT_LOGIN_REQUESTS=5
+RATE_LIMIT_LOGIN_WINDOW=60
+RATE_LIMIT_TRUSTED_PROXIES=
+
+# Admin API（ユーザー管理用、任意）
+KC_ADMIN_CLIENT_ID=admin-api-client
+KC_ADMIN_CLIENT_SECRET=<secret>
 ```
 
 ## テスト状況
@@ -124,13 +134,11 @@ auth-stack/keycloak/
 
 ## 次のタスク
 
-Phase 3.5: テナントMFAポリシー管理（実装計画済み）
-- 設計書: `docs/design/auth/mfa/` (tenant-policy, login-flow, account-settings, infrastructure)
-- 実装計画: `docs/implementation/logs/impl-002-tenant-mfa-policy.md`
-- Step 1: KeycloakAdminClient 5メソッド拡張
-- Step 2: Backend API（MFAポリシー + ステータス + create_user拡張）
-- Step 3: realm-export.json（グループ属性 + 認証フロー）
-- Step 4: Frontend（SecuritySettings + MfaStatusCard + ルート）
+Phase 3.5は完了済み。今後の拡張候補:
+- 信頼済みデバイス（Cookie）MFAスキップの有効化
+- メールOTPプロバイダーの実装
+- E2Eテストの拡充
+- 本番環境デプロイガイド
 
 ## 設計書一覧
 
@@ -168,4 +176,4 @@ docs/design/
 
 ---
 
-*最終更新: 2026-03-20*
+*最終更新: 2026-03-30*

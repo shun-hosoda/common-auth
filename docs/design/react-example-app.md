@@ -216,13 +216,16 @@
   - `user`: OIDCユーザーオブジェクト
   - `isAuthenticated`: 認証状態
   - `isLoading`: 初期ロード中フラグ
-  - `login()`, `logout()`, `register()`, `resetPassword()`, `configureMFA()`, `getAccessToken()`
+  - `error`: エラー状態
+  - `login()`, `logout()`, `register()`, `resetPassword()`, `configureMFA()`, `handleCallback()`, `getAccessToken()`
 
 ### 6.3. AuthGuard（SDK提供）
 - **責務**: ルート保護、未認証時の動作制御
 - **Props**:
   - `fallback`: ロード中に表示するUI
   - `onUnauthenticated`: 未認証時のコールバック（デフォルト: `login()`）
+  - `requiredRoles`: ロール要件（OR条件）
+  - `unauthorizedFallback`: 権限不足時の表示
 - **動作**:
   - `isLoading === true` → fallback表示
   - `isAuthenticated === false` → `onUnauthenticated()`実行
@@ -259,14 +262,14 @@
 ```typescript
 const AUTH_CONFIG = {
   authority: 'http://localhost:8080/realms/common-auth',
-  clientId: 'frontend-app',
+  clientId: 'example-app',
   redirectUri: 'http://localhost:3000/callback',
   postLogoutRedirectUri: 'http://localhost:3000',
 }
 ```
 
 ### 7.2. Keycloakクライアント設定要件
-- **Client ID**: `frontend-app`
+- **Client ID**: `example-app`
 - **Client authentication**: OFF（Public Client）
 - **Valid redirect URIs**: `http://localhost:3000/*`
 - **Valid post logout redirect URIs**: `http://localhost:3000/*`

@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 import {
   type AdminUser,
+  type EnrichedUser,
   type CreateUserInput,
   type UpdateUserInput,
   listUsers,
+  listUsersWithGroups,
   createUser,
+  getUser,
   updateUser,
   disableUser,
   resetPassword,
@@ -22,7 +25,7 @@ import {
   type NavItem,
 } from '../components/layout'
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const overlay: React.CSSProperties = {
   position: 'fixed', inset: 0,
@@ -41,7 +44,125 @@ const mfaModalBox: React.CSSProperties = {
   boxShadow: t.shadowMd,
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Merged User Type (Keycloak + App DB) ─────────────────────────────────────
+
+interface MergedUser {
+  id: string
+  email: string
+  displayName: string
+  enabled: boolean
+  groups: string[]
+  firstName?: string
+  lastName?: string
+  username?: string
+}
+
+// ─── Sort / Filter types ──────────────────────────────────────────────────────
+
+type SortKey = 'name' | 'email' | 'groups' | 'status'
+type SortDir = 'asc' | 'desc'
+
+// ─── Badge colors for groups ──────────────────────────────────────────────────
+
+const BADGE_COLORS = [
+  { bg: '#dbeafe', fg: '#1e40af' },
+  { bg: '#dcfce7', fg: '#166534' },
+  { bg: '#fef3c7', fg: '#92400e' },
+  { bg: '#fce7f3', fg: '#9d174d' },
+  { bg: '#e0e7ff', fg: '#3730a3' },
+  { bg: '#f1f5f9', fg: '#475569' },
+]
+
+function badgeColor(name: string) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0
+  return BADGE_COLORS[Math.abs(h) % BADGE_COLORS.length]
+}
+
+// ─── GroupBadges Component ────────────────────────────────────────────────────
+
+const MAX_VISIBLE_BADGES = 2
+
+function GroupBadges({ groups }: { groups: string[] }) {
+  const [showTooltip, setShowTooltip] = useState(false)
+
+  if (groups.length === 0) {
+    return (
+      <span style={{ fontSize: '0.75rem', color: t.textMuted, fontStyle: 'italic' }}>
+        未所属
+      </span>
+    )
+  }
+
+  const visible = groups.slice(0, MAX_VISIBLE_BADGES)
+  const remaining = groups.slice(MAX_VISIBLE_BADGES)
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+      {visible.map((g) => {
+        const c = badgeColor(g)
+        return (
+          <span
+            key={g}
+            style={{
+              display: 'inline-block', padding: '2px 8px', borderRadius: 12,
+              fontSize: '0.7rem', fontWeight: 500, whiteSpace: 'nowrap',
+              background: c.bg, color: c.fg,
+            }}
+          >
+            {g}
+          </span>
+        )
+      })}
+      {remaining.length > 0 && (
+        <div
+          style={{ position: 'relative', display: 'inline-block' }}
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          <span
+            style={{
+              display: 'inline-block', padding: '2px 8px', borderRadius: 12,
+              fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap',
+              background: '#f1f5f9', color: '#475569', cursor: 'default',
+            }}
+          >
+            +{remaining.length}
+          </span>
+          {showTooltip && (
+            <div
+              style={{
+                position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%',
+                transform: 'translateX(-50%)',
+                background: '#1e293b', color: '#fff', borderRadius: 6,
+                padding: '6px 10px', fontSize: '0.72rem', lineHeight: 1.6,
+                whiteSpace: 'nowrap', zIndex: 50,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              }}
+            >
+              {remaining.map((g) => (
+                <div key={g}>{g}</div>
+              ))}
+              {/* Arrow */}
+              <div
+                style={{
+                  position: 'absolute', top: '100%', left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 0, height: 0,
+                  borderLeft: '5px solid transparent',
+                  borderRight: '5px solid transparent',
+                  borderTop: '5px solid #1e293b',
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Form Types ───────────────────────────────────────────────────────────────
 
 interface CreateForm {
   email: string; firstName: string; lastName: string
@@ -85,11 +206,19 @@ export default function AdminUsers() {
   const tenantName  = Array.isArray(rawTenantId) ? rawTenantId[0] : (rawTenantId as string | undefined) ?? ''
   const tenantTitle = tenantName || (isSuperAdmin ? '全テナント管理' : 'Common Auth')
 
-  const [users, setUsers] = useState<AdminUser[]>([])
+  // ── Data state ──────────────────────────────────────────────────────────
+  const [users, setUsers] = useState<MergedUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
+  // ── Sort / Filter state ─────────────────────────────────────────────────
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [filterGroup, setFilterGroup] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+
+  // ── Modal state ─────────────────────────────────────────────────────────
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState<CreateForm>(emptyCreate())
   const [createError, setCreateError] = useState<string | null>(null)
@@ -100,20 +229,67 @@ export default function AdminUsers() {
   const [editError, setEditError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [mfaTarget,  setMfaTarget]  = useState<AdminUser | null>(null)
+  const [mfaTarget,  setMfaTarget]  = useState<MergedUser | null>(null)
   const [mfaLoading, setMfaLoading] = useState(false)
   const [openActionMenuUserId, setOpenActionMenuUserId] = useState<string | null>(null)
 
   const loaded = useRef(false)
 
-  // ── fetch ──────────────────────────────────────────────────────────────────
+  // ── fetch (merge Keycloak + App DB) ────────────────────────────────────
   const fetchUsers = useCallback(async () => {
     const token = getAccessToken()
     if (!token) return
     setLoading(true)
     setError(null)
     try {
-      setUsers(await listUsers(token))
+      const kcUsers = await listUsers(token)
+
+      // Try fetching enriched data from App DB (may be unavailable)
+      let dbUsers: EnrichedUser[] = []
+      try {
+        dbUsers = await listUsersWithGroups(token)
+      } catch {
+        // App DB endpoint not available — fall back to Keycloak-only
+      }
+
+      const dbMap = new Map(dbUsers.map((u) => [u.id, u]))
+      const merged: MergedUser[] = []
+      const seen = new Set<string>()
+
+      // Keycloak users enriched with DB groups
+      for (const kc of kcUsers) {
+        const db = dbMap.get(kc.id)
+        merged.push({
+          id: kc.id,
+          email: kc.email,
+          displayName:
+            db?.displayName ||
+            [kc.firstName, kc.lastName].filter(Boolean).join(' ') ||
+            kc.username ||
+            kc.email,
+          enabled: kc.enabled,
+          groups: db?.groups ?? [],
+          firstName: kc.firstName,
+          lastName: kc.lastName,
+          username: kc.username,
+        })
+        seen.add(kc.id)
+      }
+
+      // DB-only users (not yet in Keycloak)
+      for (const db of dbUsers) {
+        if (!seen.has(db.id)) {
+          merged.push({
+            id: db.id,
+            email: db.email,
+            displayName: db.displayName || db.email,
+            enabled: db.enabled,
+            groups: db.groups,
+          })
+        }
+      }
+
+      setUsers(merged)
     } catch (e) {
       setError(e instanceof Error ? e.message : '読み込みに失敗しました')
     } finally {
@@ -133,7 +309,65 @@ export default function AdminUsers() {
     return () => document.removeEventListener('click', close)
   }, [])
 
-  // ── create ─────────────────────────────────────────────────────────────────
+  // ── Derived: available groups for filter ────────────────────────────────
+  const allGroups = useMemo(() => {
+    const set = new Set<string>()
+    users.forEach((u) => u.groups.forEach((g) => set.add(g)))
+    return [...set].sort((a, b) => a.localeCompare(b, 'ja'))
+  }, [users])
+
+  // ── Derived: filtered + sorted list ─────────────────────────────────────
+  const processed = useMemo(() => {
+    const q = search.toLowerCase()
+    let result = users.filter((u) => {
+      const matchSearch =
+        !q ||
+        u.email.toLowerCase().includes(q) ||
+        u.displayName.toLowerCase().includes(q)
+      const matchGroup =
+        !filterGroup ||
+        (filterGroup === '__none__'
+          ? u.groups.length === 0
+          : u.groups.includes(filterGroup))
+      const matchStatus =
+        !filterStatus ||
+        (filterStatus === 'active' ? u.enabled : !u.enabled)
+      return matchSearch && matchGroup && matchStatus
+    })
+
+    result = [...result].sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'name':
+          cmp = a.displayName.localeCompare(b.displayName, 'ja')
+          break
+        case 'email':
+          cmp = a.email.localeCompare(b.email)
+          break
+        case 'groups':
+          cmp = (a.groups[0] ?? '').localeCompare(b.groups[0] ?? '', 'ja')
+          break
+        case 'status':
+          cmp = a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1
+          break
+      }
+      return sortDir === 'desc' ? -cmp : cmp
+    })
+
+    return result
+  }, [users, search, filterGroup, filterStatus, sortKey, sortDir])
+
+  // ── Sort toggle ─────────────────────────────────────────────────────────
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  // ── create ─────────────────────────────────────────────────────────────
   const handleCreate = async () => {
     const token = getAccessToken()
     if (!token) return
@@ -162,11 +396,27 @@ export default function AdminUsers() {
     }
   }
 
-  // ── edit ───────────────────────────────────────────────────────────────────
-  const openEdit = (u: AdminUser) => {
-    setEditTarget(u)
-    setEditForm(toEditForm(u))
+  // ── edit (fetches fresh Keycloak data for the form) ────────────────────
+  const openEdit = async (u: MergedUser) => {
+    const token = getAccessToken()
+    if (!token) return
     setEditError(null)
+    try {
+      const kcUser = await getUser(token, u.id)
+      setEditTarget(kcUser)
+      setEditForm(toEditForm(kcUser))
+    } catch {
+      setEditTarget({
+        id: u.id, email: u.email, username: u.email, enabled: u.enabled,
+        emailVerified: true, firstName: u.displayName.split(' ')[0],
+        lastName: u.displayName.split(' ').slice(1).join(' '),
+      })
+      setEditForm({
+        firstName: u.displayName.split(' ')[0] ?? '',
+        lastName: u.displayName.split(' ').slice(1).join(' ') ?? '',
+        email: u.email, newPassword: '', resetPassword: false,
+      })
+    }
   }
 
   const handleSave = async () => {
@@ -197,7 +447,7 @@ export default function AdminUsers() {
     }
   }
 
-  // ── MFA reset ──────────────────────────────────────────────────────────────
+  // ── MFA reset ──────────────────────────────────────────────────────────
   const handleMfaReset = async () => {
     if (!mfaTarget) return
     const token = getAccessToken()
@@ -213,8 +463,8 @@ export default function AdminUsers() {
     }
   }
 
-  // ── toggle enabled ─────────────────────────────────────────────────────────
-  const toggleEnabled = async (u: AdminUser) => {
+  // ── toggle enabled ─────────────────────────────────────────────────────
+  const toggleEnabled = async (u: MergedUser) => {
     const token = getAccessToken()
     if (!token) return
     try {
@@ -229,15 +479,15 @@ export default function AdminUsers() {
     }
   }
 
-  // ── filter ─────────────────────────────────────────────────────────────────
-  const filtered = users.filter((u) => {
-    const q = search.toLowerCase()
-    return (
-      u.email.toLowerCase().includes(q) ||
-      (u.firstName ?? '').toLowerCase().includes(q) ||
-      (u.lastName ?? '').toLowerCase().includes(q)
-    )
-  })
+  // ─── Sortable header helper ─────────────────────────────────────────────
+  const thStyle: React.CSSProperties = {
+    padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem',
+    fontWeight: 600, color: t.textMuted, textTransform: 'uppercase',
+    letterSpacing: '0.05em', borderBottom: `1px solid ${t.border}`,
+    cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+  }
+  const sortIndicator = (key: SortKey) =>
+    sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''
 
   // ─── render ────────────────────────────────────────────────────────────────
   const navItems: NavItem[] = [
@@ -338,19 +588,49 @@ export default function AdminUsers() {
             </button>
           </div>
 
-          {/* Search */}
-          <input
-            type="text"
-            placeholder="名前・メールで検索..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: '100%', padding: '8px 12px',
-              border: `1px solid ${t.border}`, borderRadius: t.radiusMd,
-              fontSize: '0.9rem', boxSizing: 'border-box',
-              marginBottom: '16px', outline: 'none',
-            }}
-          />
+          {/* Search + Filters */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder="名前・メールで検索..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                flex: '1 1 200px', padding: '8px 12px',
+                border: `1px solid ${t.border}`, borderRadius: t.radiusMd,
+                fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none',
+              }}
+            />
+            <select
+              value={filterGroup}
+              onChange={(e) => setFilterGroup(e.target.value)}
+              style={{
+                padding: '8px 12px', border: `1px solid ${t.border}`,
+                borderRadius: t.radiusMd, fontSize: '0.85rem',
+                background: t.surface, color: t.text, outline: 'none',
+              }}
+            >
+              <option value="">全グループ</option>
+              {allGroups.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+              <option value="__none__">未所属</option>
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{
+                padding: '8px 12px', border: `1px solid ${t.border}`,
+                borderRadius: t.radiusMd, fontSize: '0.85rem',
+                background: t.surface, color: t.text, outline: 'none',
+              }}
+            >
+              <option value="">全ステータス</option>
+              <option value="active">有効</option>
+              <option value="inactive">無効</option>
+            </select>
+          </div>
+
           {/* Table */}
           {loading ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: t.textMuted }}>読み込み中...</div>
@@ -366,31 +646,39 @@ export default function AdminUsers() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: t.bg }}>
-                    {['ユーザー', 'メール', 'テナント', 'ステータス', '操作'].map((h) => (
-                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: `1px solid ${t.border}` }}>{h}</th>
-                    ))}
+                    <th style={thStyle} onClick={() => toggleSort('name')}>
+                      ユーザー{sortIndicator('name')}
+                    </th>
+                    <th style={thStyle} onClick={() => toggleSort('email')}>
+                      メール{sortIndicator('email')}
+                    </th>
+                    <th style={thStyle} onClick={() => toggleSort('groups')}>
+                      グループ{sortIndicator('groups')}
+                    </th>
+                    <th style={thStyle} onClick={() => toggleSort('status')}>
+                      ステータス{sortIndicator('status')}
+                    </th>
+                    <th style={{ ...thStyle, cursor: 'default' }}>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length === 0 ? (
+                  {processed.length === 0 ? (
                     <tr><td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: t.textMuted }}>ユーザーが見つかりません</td></tr>
-                  ) : filtered.map((u, idx) => {
-                    const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username
-                    const initial = name.charAt(0).toUpperCase()
-                    const tId = u.attributes?.tenant_id?.[0] ?? '—'
+                  ) : processed.map((u, idx) => {
+                    const initial = u.displayName.charAt(0).toUpperCase()
                     return (
-                      <tr key={u.id} style={{ borderBottom: idx < filtered.length - 1 ? `1px solid ${t.border}` : 'none' }}>
+                      <tr key={u.id} style={{ borderBottom: idx < processed.length - 1 ? `1px solid ${t.border}` : 'none' }}>
                         <td style={{ padding: '12px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <div style={{ width: 36, height: 36, borderRadius: t.radiusFull, background: t.primary, color: t.textInverse, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
                               {initial}
                             </div>
-                            <span style={{ fontWeight: 500, fontSize: '0.9rem', color: t.text }}>{name}</span>
+                            <span style={{ fontWeight: 500, fontSize: '0.9rem', color: t.text }}>{u.displayName}</span>
                           </div>
                         </td>
                         <td style={{ padding: '12px 16px', color: t.textMuted, fontSize: '0.875rem' }}>{u.email}</td>
                         <td style={{ padding: '12px 16px' }}>
-                          <code style={{ fontSize: '0.78rem', background: t.bg, padding: '2px 7px', borderRadius: 4, border: `1px solid ${t.border}` }}>{tId}</code>
+                          <GroupBadges groups={u.groups} />
                         </td>
                         <td style={{ padding: '12px 16px' }}>
                           <span style={{
@@ -480,7 +768,7 @@ export default function AdminUsers() {
                 </tbody>
               </table>
               <div style={{ padding: '8px 16px', borderTop: `1px solid ${t.border}`, fontSize: '0.78rem', color: t.textMuted }}>
-                {filtered.length} 件 / 全 {users.length} 件
+                {processed.length} 件 / 全 {users.length} 件
               </div>
             </div>
           )}
@@ -495,7 +783,7 @@ export default function AdminUsers() {
               <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔐</div>
               <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>MFA 設定をリセット</h2>
               <p style={{ margin: 0, color: t.textMuted, fontSize: '0.875rem', lineHeight: 1.6 }}>
-                <strong>{[mfaTarget.firstName, mfaTarget.lastName].filter(Boolean).join(' ') || mfaTarget.email}</strong> の
+                <strong>{mfaTarget.displayName || mfaTarget.email}</strong> の
                 MFA（二要素認証）設定を削除します。<br />
                 次回ログイン時にMFAを再設定するよう求められます。
               </p>

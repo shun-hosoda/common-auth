@@ -48,7 +48,16 @@ CREATE TABLE user_profiles (
     last_login_at   TIMESTAMPTZ,
     synced_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    -- 拡張プロフィール
+    avatar_url      VARCHAR(500),
+    phone_number    VARCHAR(50),
+    job_title       VARCHAR(200),
+    locale          VARCHAR(10)   DEFAULT 'ja',
+    timezone        VARCHAR(50)   DEFAULT 'Asia/Tokyo',
+    is_active       BOOLEAN       NOT NULL DEFAULT TRUE,
+    deactivated_at  TIMESTAMPTZ,
+    metadata        JSONB         DEFAULT '{}'
 );
 
 CREATE INDEX idx_user_profiles_tenant_id ON user_profiles(tenant_id);
@@ -74,7 +83,138 @@ CREATE UNIQUE INDEX idx_user_profiles_tenant_email ON user_profiles(tenant_id, e
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation_policy ON user_profiles
-    USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+    USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
+
+-- -----------------------------------------------------------
+-- グループ・権限管理テーブル
+-- テナント内の部署・チーム管理および権限制御を行う。
+-- -----------------------------------------------------------
+
+-- テナント内グループ（部署・チーム等）
+CREATE TABLE tenant_groups (
+    id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         UUID         NOT NULL REFERENCES tenants(id),
+    name              VARCHAR(200) NOT NULL,
+    description       TEXT,
+    parent_group_id   UUID         REFERENCES tenant_groups(id) ON DELETE SET NULL,
+    is_active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    sort_order        INTEGER      NOT NULL DEFAULT 0,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_tg_no_self_ref CHECK (parent_group_id IS DISTINCT FROM id)
+);
+
+CREATE UNIQUE INDEX uq_tg_tenant_name_active
+    ON tenant_groups (tenant_id, name) WHERE is_active = TRUE;
+
+ALTER TABLE tenant_groups ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON tenant_groups
+    USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
+
+-- ユーザーとグループの多対多中間テーブル
+CREATE TABLE user_group_memberships (
+    user_id     UUID        NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    group_id    UUID        NOT NULL REFERENCES tenant_groups(id) ON DELETE CASCADE,
+    added_by    UUID        REFERENCES user_profiles(id)          ON DELETE SET NULL,
+    joined_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, group_id)
+);
+
+ALTER TABLE user_group_memberships ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON user_group_memberships
+    USING (
+        group_id IN (
+            SELECT id FROM tenant_groups
+             WHERE tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID
+        )
+    );
+
+-- 権限定義テーブル（resource × action）
+CREATE TABLE permissions (
+    id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    UUID         REFERENCES tenants(id) ON DELETE CASCADE,
+    resource     VARCHAR(100) NOT NULL,
+    action       VARCHAR(50)  NOT NULL,
+    description  TEXT,
+    is_system    BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_permissions_system_tenant
+        CHECK (
+            (is_system = TRUE  AND tenant_id IS NULL)
+            OR
+            (is_system = FALSE AND tenant_id IS NOT NULL)
+        )
+);
+
+ALTER TABLE permissions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON permissions
+    USING (
+        tenant_id IS NULL
+        OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID
+    );
+
+-- グループへの権限割り当て
+CREATE TABLE group_permissions (
+    group_id       UUID        NOT NULL REFERENCES tenant_groups(id) ON DELETE CASCADE,
+    permission_id  UUID        NOT NULL REFERENCES permissions(id)   ON DELETE CASCADE,
+    granted        BOOLEAN     NOT NULL DEFAULT TRUE,
+    granted_by     UUID        REFERENCES user_profiles(id)          ON DELETE SET NULL,
+    granted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at     TIMESTAMPTZ,
+    PRIMARY KEY (group_id, permission_id)
+);
+
+ALTER TABLE group_permissions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON group_permissions
+    USING (
+        group_id IN (
+            SELECT id FROM tenant_groups
+             WHERE tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID
+        )
+    );
+
+-- ユーザーへの直接権限割り当て（グループ権限より優先）
+CREATE TABLE user_permissions (
+    user_id        UUID        NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    permission_id  UUID        NOT NULL REFERENCES permissions(id)   ON DELETE CASCADE,
+    granted        BOOLEAN     NOT NULL DEFAULT TRUE,
+    granted_by     UUID        REFERENCES user_profiles(id)          ON DELETE SET NULL,
+    granted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at     TIMESTAMPTZ,
+    PRIMARY KEY (user_id, permission_id)
+);
+
+ALTER TABLE user_permissions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON user_permissions
+    USING (
+        user_id IN (
+            SELECT id FROM user_profiles
+             WHERE tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID
+        )
+    );
+
+-- 実効権限ビュー（ユーザー直接権限 + グループ経由権限を統合）
+CREATE OR REPLACE VIEW v_user_effective_permissions AS
+SELECT
+    up.user_id, p.tenant_id, p.resource, p.action, up.granted, 'direct' AS source
+FROM user_permissions up
+JOIN permissions p ON p.id = up.permission_id
+WHERE (up.expires_at IS NULL OR up.expires_at > NOW())
+UNION ALL
+SELECT
+    ugm.user_id, p.tenant_id, p.resource, p.action,
+    BOOL_AND(gp.granted) AS granted, 'group' AS source
+FROM user_group_memberships ugm
+JOIN tenant_groups tg ON tg.id = ugm.group_id AND tg.is_active = TRUE
+JOIN group_permissions gp ON gp.group_id = ugm.group_id
+JOIN permissions p ON p.id = gp.permission_id
+WHERE (gp.expires_at IS NULL OR gp.expires_at > NOW())
+  AND NOT EXISTS (
+    SELECT 1 FROM user_permissions up2
+    WHERE up2.user_id = ugm.user_id AND up2.permission_id = gp.permission_id
+      AND (up2.expires_at IS NULL OR up2.expires_at > NOW())
+)
+GROUP BY ugm.user_id, p.tenant_id, p.resource, p.action;
 
 -- 補足: roles カラムについて
 -- Phase 1では TEXT[] で簡易実装。将来的にRBAC強化が必要な場合、

@@ -12,14 +12,18 @@ Keycloak v24+ を使用したMFA認証フローの基盤設計。
 
 ## 2. 認証フロー構成
 
-| フロー名 | 対象 | ステップ |
-|---------|------|---------|
-| `custom-mail-mfa-flow` | メールOTPテナント | Username/Password → Email OTP |
-| `custom-totp-flow` | TOTPテナント | Username/Password → OTP（初回: Configure OTP） |
-| `unified-mfa-browser` | 統合フロー（Phase 3.5） | Username/Password → Conditional MFA Gate |
+現在は `unified-mfa-browser` フロー1本に統合済み。
 
-> Phase 3.5で `unified-mfa-browser` を導入し、テナントグループ属性に基づく動的MFA方式切替を実現。
+| フロー / サブフロー | 用途 |
+|-------------------|------|
+| `unified-mfa-browser` | メインブラウザフロー（`browserFlow` に設定） |
+| `unified-mfa-browser forms` | フォーム認証サブフロー |
+| `unified-mfa-browser mfa-gate` | MFA条件分岐サブフロー（`conditional-user-attribute` で判定） |
+
+> テナントグループ属性 (`mfa_enabled`, `mfa_method`) に基づく動的MFA方式切替を実現。
 > 詳細は [ログインフロー設計](login-flow.md) を参照。
+>
+> **廃止済み**: `custom-mail-mfa-flow`, `custom-totp-flow` は `unified-mfa-browser` に統合されたため削除。
 
 ---
 
@@ -30,7 +34,7 @@ Keycloak v24+ を使用したMFA認証フローの基盤設計。
 | OTP桁数 | 6桁 |
 | OTP有効期限 | 5分（300秒） |
 | 試行上限 | 3回（超過でロック） |
-| TOTPアルゴリズム | HMAC-SHA1 / 30秒 |
+| TOTPアルゴリズム | HmacSHA256 / 30秒 |
 | 信頼済みCookie有効期限 | 30日（環境変数で変更可） |
 | Cookie属性 | SameSite=Strict, Secure, HttpOnly |
 
@@ -39,12 +43,15 @@ Keycloak v24+ を使用したMFA認証フローの基盤設計。
 ## 4. インフラ構成
 
 ```
-docker-compose.yml
+auth-stack/docker-compose.yml
   ├─ keycloak (v24+)
   │    └─ 起動時に realm-export.json を自動インポート
-  ├─ postgres (v16)
+  ├─ keycloak-db (postgres:16)
   │    └─ healthcheck: pg_isready -U keycloak
   │    └─ keycloakは depends_on: condition: service_healthy
+  ├─ app-db (postgres:16)
+  │    └─ 業務DB（user_profiles, tenant_groups 等）
+  │    └─ port: 5433
   └─ mailhog (開発用SMTPモック)
        └─ SMTP: 1025 / WebUI: 8025
 ```
@@ -57,19 +64,21 @@ docker-compose.yml
 
 | 変数名 | 説明 | デフォルト |
 |--------|------|----------|
-| `KC_SMTP_HOST` | SMTPホスト | `mailhog` |
-| `KC_SMTP_PORT` | SMTPポート | `1025` |
-| `KC_SMTP_FROM` | 送信元アドレス | `noreply@example.com` |
-| `KC_SMTP_AUTH` | SMTP認証有無 | `false` |
-| `KC_SMTP_USER` | SMTPユーザー | — |
-| `KC_SMTP_PASSWORD` | SMTPパスワード | `.env` で管理 |
-| `KC_SMTP_SSL` | SSL有効 | `false` |
-| `KC_SMTP_TLS` | TLS有効 | `false` |
-| `KC_OTP_EXPIRES_IN` | OTP有効期限（秒） | `300` |
-| `KC_COOKIE_MAX_AGE` | 信頼済みCookie期間（秒） | `2592000` |
-| `KC_DB_URL` | PostgreSQL接続URL | — |
-| `KC_DB_USERNAME` | DBユーザー | `keycloak` |
-| `KC_DB_PASSWORD` | DBパスワード | `.env` で管理 |
+| `SMTP_HOST` | SMTPホスト | `mailhog` |
+| `SMTP_PORT` | SMTPポート | `1025` |
+| `SMTP_FROM` | 送信元アドレス | `noreply@example.com` |
+| `SMTP_FROM_DISPLAY_NAME` | 送信元表示名 | `Common Auth` |
+| `SMTP_AUTH` | SMTP認証有無 | `false` |
+| `SMTP_USER` | SMTPユーザー | — |
+| `SMTP_PASSWORD` | SMTPパスワード | `.env` で管理 |
+| `SMTP_SSL` | SSL有効 | `false` |
+| `SMTP_STARTTLS` | STARTTLS有効 | `false` |
+| `KC_DB_URL` | Keycloak DB接続URL | — |
+| `KC_DB_USERNAME` | Keycloak DBユーザー | `keycloak` |
+| `KC_DB_PASSWORD` | Keycloak DBパスワード | `.env` で管理 |
+
+> docker-compose.yml では `KC_SPI_EMAIL_TEMPLATE_SMTP_SERVER_*` 形式で
+> 上記 `SMTP_*` 変数を参照する（例: `${SMTP_HOST:-mailhog}`）。
 
 ### シークレット管理ルール
 
@@ -119,23 +128,23 @@ DELETE /admin/realms/{realm}/users/{userId}/credentials/{credentialId}
 ## 9. ファイル構成
 
 ```
-auth-stack/
-├── docker-compose.yml
+auth-stack/                          # ← メインの認証スタック
+├── docker-compose.yml               #   4サービス (keycloak, keycloak-db, app-db, mailhog)
 ├── .env.example
-└── keycloak/
-    ├── realm-export.json           # メインRealm設定
-    └── realm-export-totp.json      # TOTP専用フロー（顧客B用）
-infra/
-├── docker-compose.yml              # 開発環境
-├── docker-compose-totp.yml         # TOTP開発環境
+├── keycloak/
+│   └── realm-export.json            #   統合Realm設定（unified-mfa-browser フロー含む）
+└── postgres/
+    └── init.sql                     #   業務DB初期化スクリプト
+infra/                               # ← レガシー（開発検証用、参考として残存）
+├── docker-compose.yml
+├── docker-compose-totp.yml
 └── keycloak/
     ├── realm-export.json
     └── realm-export-totp.json
 ```
 
-> `realm-export.json` と `realm-export-totp.json` を別ファイル管理。
-> 共通設定（SMTP・DB接続・セキュリティポリシー）は `.env` で吸収。
-> 将来的に統合が必要な場合は ADR-001 改訂で対応。
+> `unified-mfa-browser` への統合完了により、`realm-export-totp.json` は不要。
+> `infra/` 配下は過去の検証構成として残存しているが、本番利用は `auth-stack/` を使用すること。
 
 ---
 

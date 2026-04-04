@@ -3,7 +3,10 @@
 ## 1. 概要
 
 管理者によるユーザー管理と、ロールベースのアクセス制御をカスタムReact UIで実装する。
-Keycloak Admin REST APIをBackend Admin APIでプロキシし、テナント境界を強制する。
+Keycloak Admin REST APIをBackend SDK内蔵のAdmin APIでプロキシし、テナント境界を強制する。
+
+> Admin APIはBackend SDKの `setup_auth()` で自動的に `/api/admin` にマウントされる。
+> ユーザー登録は `registrationAllowed: false` のため、管理者がAdmin API経由で行う。
 
 ### 対象PRD要件
 
@@ -118,24 +121,35 @@ Client認証: client_id + client_secret
 
 ```typescript
 interface AuthContextValue {
-  // 既存
+  // 認証状態
   user: User | null;
   isAuthenticated: boolean;
-  login: () => void;
-  logout: () => void;
+  isLoading: boolean;
+  error: Error | null;
   
-  // Phase 3追加
+  // 認証操作
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
+  register: () => void;
+  resetPassword: () => void;
+  configureMFA: () => void;
+  handleCallback: () => Promise<void>;
+  
+  // トークン・ロール
+  getAccessToken: () => string | null;
   hasRole: (role: string) => boolean;
 }
 ```
 
-### AuthGuard拡張
+### AuthGuard
 
 ```typescript
 interface AuthGuardProps {
   children: ReactNode;
-  requiredRoles?: string[];   // ロール要件
-  fallback?: ReactNode;       // 権限不足時の表示
+  requiredRoles?: string[];         // ロール要件（OR条件）
+  fallback?: ReactNode;             // ローディング中の表示
+  onUnauthenticated?: () => void;   // 未認証時のコールバック
+  unauthorizedFallback?: ReactNode; // 権限不足時の表示
 }
 ```
 
@@ -183,14 +197,19 @@ auth-stack/keycloak/themes/
 ## 7. Keycloak設定変更
 
 - Realm Role追加: `super_admin`, `tenant_admin`
-- テストユーザー: `admin@example.com`（tenant_admin）, `superadmin@example.com`（super_admin）
-- `admin-api-client`（Confidential Client）: Service Account Roles で `realm-management` 付与
+- テストユーザー: `admin_acme-corp@example.com`（tenant_admin）, `admin_globex-inc@example.com`（tenant_admin）
+- `super_admin` ロールは定義済みだがテストユーザーには未割り当て（運用時に手動付与）
+- `admin-api-client`（Confidential Client）: Service Account Roles で `realm-admin` 付与
 - Client Theme: `loginTheme: "common-auth"`
+- `registrationAllowed: false`（ユーザー登録は管理者がAdmin API経由で実施）
+- `VERIFY_EMAIL` defaultAction: `false`
 
 ## 8. DB設計
 
-追加不要。ロール情報はKeycloakが管理する。
-アプリ側DBには業務データのみ（RLSで `tenant_id` 分離済み）。
+ロール情報はKeycloakが管理する。
+アプリ側DB（app-db）にはグループ・権限管理テーブルを追加済み:
+`tenant_groups`, `user_group_memberships`, `permissions`, `group_permissions`, `user_permissions`
+（RLSで `tenant_id` 分離済み）。
 
 ---
 

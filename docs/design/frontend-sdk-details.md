@@ -14,12 +14,10 @@ packages/frontend-sdk/
 ├── src/
 │   ├── index.ts              # エクスポート
 │   ├── AuthProvider.tsx       # Context Provider
+│   ├── AuthContext.ts        # React Context定義
 │   ├── useAuth.ts            # Main Hook
 │   ├── AuthGuard.tsx         # Route Guard Component
-│   ├── types.ts              # TypeScript型定義
-│   └── utils/
-│       ├── oidcClient.ts     # oidc-client-ts wrapper
-│       └── storage.ts        # SessionStorage wrapper
+│   └── types.ts              # TypeScript型定義
 ```
 
 ---
@@ -32,6 +30,7 @@ interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: Error | null;
   
   // 認証操作
   login: () => Promise<void>;
@@ -40,10 +39,12 @@ interface AuthContextValue {
   // Keycloakページへのリダイレクト
   register: () => void;           // 登録ページ
   resetPassword: () => void;      // パスワードリセットページ
-  configureMFA: () => void;       // MFA設定ページ
+  configureMFA: () => void;       // MFA設定（kc_action: CONFIGURE_TOTP）
+  handleCallback: () => Promise<void>;  // OIDCコールバック処理
   
-  // ロール判定
-  hasRole: (role: string) => boolean;
+  // トークン・ロール
+  getAccessToken: () => string | null;  // アクセストークン取得
+  hasRole: (role: string) => boolean;   // ロール判定
 }
 ```
 
@@ -59,7 +60,9 @@ interface AuthProviderProps {
   authority: string;              // Keycloak issuer URL
   clientId: string;
   redirectUri: string;
-  postLogoutRedirectUri: string;
+  postLogoutRedirectUri?: string; // 省略時はredirectUriを使用
+  scope?: string;                 // デフォルト: 'openid profile email'
+  automaticSilentRenew?: boolean; // デフォルト: true
 }
 ```
 
@@ -75,13 +78,16 @@ interface AuthProviderProps {
 ```typescript
 interface AuthGuardProps {
   children: ReactNode;
-  requiredRoles?: string[];   // ロール要件
-  fallback?: ReactNode;       // 権限不足時の表示
+  requiredRoles?: string[];         // ロール要件
+  fallback?: ReactNode;             // ローディング中の表示
+  onUnauthenticated?: () => void;   // 未認証時のコールバック（デフォルト: login()）
+  unauthorizedFallback?: ReactNode; // 権限不足時の表示（デフォルト: "Access Denied"）
 }
 ```
 
 - `isAuthenticated` でルートを保護
-- `requiredRoles` 指定時は `hasRole()` も検証
+- `requiredRoles` 指定時は `hasRole()` も検証（OR条件: いずれか1つのロールを持っていればOK）
+- `onUnauthenticated` 未指定時は自動で `login()` を実行
 - フロントのRBACはUI制御のみ。API側でも必ずバックエンド検証を行う
 
 ---

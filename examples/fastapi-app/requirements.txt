@@ -1,6 +1,7 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 python-dotenv>=1.0.0
+asyncpg>=0.29.0
 
 # Install common-auth from local package
 # In production, use: common-auth>=1.0.0

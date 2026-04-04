@@ -68,6 +68,16 @@ SaaS BtoB要件の確定に伴い、Shared Realm + Groups方式に改訂。
   └── globex-inc    (テスト用テナントB)
 ```
 
+### 業務DBテナント
+
+業務DB（app-db）には3テナントがシードされる:
+
+| realm_name | display_name | 用途 |
+|------------|-------------|------|
+| `common-auth` | Common Auth Test Tenant | SDKテスト用 |
+| `acme-corp` | Acme Corp | テストテナントA |
+| `globex-inc` | Globex Inc | テストテナントB |
+
 ### グループ属性
 
 ```json
@@ -90,13 +100,12 @@ SaaS BtoB要件の確定に伴い、Shared Realm + Groups方式に改訂。
 
 | ユーザー | tenant_id | グループ | ロール |
 |---------|-----------|---------|--------|
-| `user_acme-corp@example.com` | acme-corp | /tenants/acme-corp | user |
+| `testuser_acme-corp@example.com` | acme-corp | /tenants/acme-corp | user |
 | `admin_acme-corp@example.com` | acme-corp | /tenants/acme-corp | user, tenant_admin |
-| `user_globex-inc@example.com` | globex-inc | /tenants/globex-inc | user |
+| `testuser_globex-inc@example.com` | globex-inc | /tenants/globex-inc | user |
 | `admin_globex-inc@example.com` | globex-inc | /tenants/globex-inc | user, tenant_admin |
-| `superadmin@example.com` | （なし） | — | user, super_admin |
 
-> super_admin は `tenant_id` 属性なし（全テナント管理）。
+> `super_admin` ロールはRealmレベルで定義済みだが、現在のテストデータでは割り当てられているユーザーはいない。運用時にKeycloak Adminコンソールから手動で付与する。
 > MVPでは1ユーザー1テナントのみ。複数テナント所属はPhase 4以降で検討。
 
 ---

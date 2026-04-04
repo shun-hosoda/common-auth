@@ -3,22 +3,22 @@ info:
   title: common-auth Backend SDK API
   version: 1.0.0
   description: |
-    共通認証モジュールのBackend SDKが提供するオプショナルAPIルーター。
-    業務アプリケーションにマウントして使用する。
+    共通認証モジュールのBackend SDKが提供するAPIルーター。
+    業務アプリケーションに `setup_auth()` でマウントして使用する。
     認証フロー自体はKeycloak (OIDC) が処理し、本APIはトークン検証後の
-    ユーザー情報取得・死活監視・ログアウト処理を担当する。
+    ユーザー情報取得・死活監視・ログアウト処理・Admin API を担当する。
 
 servers:
   - url: http://localhost:8000
     description: Local development
 
 paths:
+  # ── Auth Endpoints (/auth) ──────────────────────────────────────────────
+
   /auth/me:
     get:
       summary: 現在の認証ユーザー情報を取得
-      description: |
-        JWTアクセストークンをデコードし、現在のユーザー情報を返却する。
-        user_profilesへのLazy Syncが有効な場合、業務DBのプロフィール情報も含む。
+      description: JWTアクセストークンをデコードし、現在のユーザー情報を返却する。
       operationId: getAuthMe
       tags: [auth]
       security:
@@ -41,7 +41,7 @@ paths:
     get:
       summary: Auth Stack死活監視
       description: |
-        Keycloakへの接続状態とJWKS公開鍵の取得状態を確認する。
+        Keycloakへの接続状態を確認する。
         認証不要のパブリックエンドポイント。
       operationId: getAuthHealth
       tags: [auth]
@@ -61,20 +61,15 @@ paths:
 
   /auth/logout:
     post:
-      summary: ログアウト（トークン失効）
+      summary: ログアウト（ログ記録）
       description: |
-        Keycloakのトークン失効エンドポイントにリフレッシュトークンを送信し、
-        サーバーサイドでセッションを無効化する。
+        ログアウトイベントをサーバーサイドで記録する。
+        ステートレスJWTアーキテクチャのため、実際のトークン失効は
+        フロントエンドのOIDC signoutRedirect で処理される。
       operationId: postAuthLogout
       tags: [auth]
       security:
         - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LogoutRequest"
       responses:
         "204":
           description: ログアウト成功
@@ -84,6 +79,246 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/mfa-status:
+    get:
+      summary: 現在のユーザーのMFA設定状態を取得
+      description: |
+        ユーザー属性からMFAポリシーを判定し、
+        OTPクレデンシャルの有無でTOTP設定済みかを確認する。
+      operationId: getAuthMfaStatus
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: MFA設定状態
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaStatusResponse"
+        "401":
+          description: 未認証
+        "503":
+          description: Admin API未設定
+
+  # ── Admin User Endpoints (/api/admin) ───────────────────────────────────
+
+  /api/admin/users:
+    get:
+      summary: テナント内ユーザー一覧
+      operationId: listUsers
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: ユーザー一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KeycloakUser"
+        "403":
+          description: 権限不足（tenant_admin以上が必要）
+    post:
+      summary: ユーザー新規作成
+      operationId: createUser
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        "403":
+          description: 権限不足
+
+  /api/admin/users/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: ユーザー詳細取得
+      operationId: getUser
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: ユーザー詳細
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycloakUser"
+        "403":
+          description: 権限不足またはテナント境界違反
+    put:
+      summary: ユーザー情報更新
+      operationId: updateUser
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: 更新成功
+        "403":
+          description: 権限不足またはテナント境界違反
+    delete:
+      summary: ユーザー無効化（論理削除）
+      operationId: disableUser
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 無効化成功
+        "400":
+          description: 自身のアカウントは無効化不可
+        "403":
+          description: 権限不足またはテナント境界違反
+
+  /api/admin/users/{user_id}/reset-password:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: パスワードリセット
+      operationId: resetPassword
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordBody"
+      responses:
+        "200":
+          description: リセット成功
+        "403":
+          description: 権限不足またはテナント境界違反
+
+  /api/admin/users/{user_id}/reset-mfa:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: MFAリセット
+      operationId: resetMfa
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: MFAリセット成功
+        "403":
+          description: 権限不足またはテナント境界違反
+
+  # ── Admin MFA Policy Endpoints ──────────────────────────────────────────
+
+  /api/admin/security/mfa:
+    get:
+      summary: テナントMFAポリシー取得
+      operationId: getMfaSettings
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: MFAポリシー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaSettings"
+        "403":
+          description: 権限不足
+        "404":
+          description: テナントグループが見つからない
+    put:
+      summary: テナントMFAポリシー更新・全ユーザー伝播
+      operationId: updateMfaSettings
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaSettingsBody"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaUpdateResult"
+        "403":
+          description: 権限不足
+        "404":
+          description: テナントグループが見つからない
+
+  # ── Admin Client (Tenant) Endpoints ─────────────────────────────────────
+
+  /api/admin/clients:
+    get:
+      summary: テナント一覧（super_admin専用）
+      operationId: listClients
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: テナント一覧
+        "403":
+          description: super_admin権限が必要
+    post:
+      summary: テナント作成（super_admin専用）
+      operationId: createClient
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientBody"
+      responses:
+        "201":
+          description: 作成成功
+        "403":
+          description: super_admin権限が必要
 
 components:
   securitySchemes:
@@ -101,37 +336,29 @@ components:
         sub:
           type: string
           format: uuid
-          description: Keycloakユーザー識別子（不変UUID）
           example: "550e8400-e29b-41d4-a716-446655440000"
         tenant_id:
           type: string
-          description: テナント識別子（Realm名またはカスタムクレーム値）
-          example: "customer-a"
+          example: "acme-corp"
         email:
           type: string
           format: email
-          description: メールアドレス
           example: "user@example.com"
         email_verified:
           type: boolean
-          description: メールアドレス確認済みフラグ
           example: true
         display_name:
           type: string
-          description: 表示名
           example: "山田太郎"
         roles:
           type: array
           items:
             type: string
-          description: Keycloak Realm/Clientロール
-          example: ["user", "admin"]
+          example: ["user", "tenant_admin"]
         iat:
           type: integer
-          description: トークン発行時刻（Unix epoch）
         exp:
           type: integer
-          description: トークン有効期限（Unix epoch）
 
     HealthResponse:
       type: object
@@ -140,33 +367,129 @@ components:
         status:
           type: string
           enum: [healthy, degraded, unhealthy]
-          description: 全体の状態
         keycloak:
           type: object
           properties:
             reachable:
               type: boolean
-              description: Keycloakへの接続可否
             url:
               type: string
-              description: Keycloak URL
-        jwks:
-          type: object
-          properties:
-            cached:
-              type: boolean
-              description: JWKS公開鍵がキャッシュ済みか
-            last_refreshed:
-              type: string
-              format: date-time
-              description: 最終JWKS取得時刻
 
-    LogoutRequest:
+    MfaStatusResponse:
+      type: object
+      required: [mfa_enabled, mfa_method, mfa_configured]
+      properties:
+        mfa_enabled:
+          type: boolean
+        mfa_method:
+          type: string
+          enum: [totp, email]
+        mfa_configured:
+          type: boolean
+
+    MfaSettings:
       type: object
       properties:
-        refresh_token:
+        mfa_enabled:
+          type: boolean
+        mfa_method:
           type: string
-          description: リフレッシュトークン（指定時はKeycloakでも失効させる）
+          enum: [totp, email]
+
+    MfaSettingsBody:
+      type: object
+      required: [mfa_enabled]
+      properties:
+        mfa_enabled:
+          type: boolean
+        mfa_method:
+          type: string
+          enum: [totp, email]
+          default: totp
+
+    MfaUpdateResult:
+      type: object
+      properties:
+        status:
+          type: string
+          example: updated
+        mfa_enabled:
+          type: boolean
+        mfa_method:
+          type: string
+        users_updated:
+          type: integer
+        users_failed:
+          type: integer
+
+    KeycloakUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        enabled:
+          type: boolean
+        attributes:
+          type: object
+
+    CreateUserBody:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        password:
+          type: string
+        temporary:
+          type: boolean
+          default: true
+
+    UpdateUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        enabled:
+          type: boolean
+
+    ResetPasswordBody:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+        temporary:
+          type: boolean
+          default: true
+
+    CreateClientBody:
+      type: object
+      required: [clientId]
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
 
     ErrorResponse:
       type: object
@@ -174,36 +497,10 @@ components:
       properties:
         error:
           type: string
-          description: エラーコード
           example: "unauthorized"
         message:
           type: string
-          description: エラーメッセージ
           example: "Invalid or expired token"
         detail:
           type: string
           description: 詳細情報（開発環境のみ）
-          example: "Token signature verification failed"
-
-    # エラーレスポンス一覧
-    # 
-    # Backend SDK（認証ミドルウェア）が返すエラー:
-    # 
-    # | HTTPステータス | error | message | 発生条件 |
-    # |---|---|---|---|
-    # | 401 | unauthorized | Invalid or expired token | JWT検証失敗（署名不一致、有効期限切れ） |
-    # | 401 | unauthorized | Missing authorization header | Authorizationヘッダなし |
-    # | 401 | unauthorized | Invalid token format | Bearer形式でない、不正なJWT |
-    # | 403 | forbidden | Insufficient permissions | ロール/スコープ不足 |
-    # | 500 | internal_server_error | Authentication service error | 設定不備（環境変数不足） |
-    # | 503 | service_unavailable | Keycloak unavailable | Keycloak接続失敗、JWKS取得失敗 |
-    # 
-    # Graceful Degradation戦略（JWKS取得失敗時）:
-    # - JWKS公開鍵キャッシュが有効（24時間以内）→ キャッシュで検証継続
-    # - キャッシュ期限切れ → 503エラーを返し、リトライを促す
-    # - 未知のkid検出時 → JWKS即時リフレッシュ、失敗時は503
-    # 
-    # 設定バリデーション:
-    # - 起動時に必須環境変数（KEYCLOAK_URL, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID）を確認
-    # - 不足時は明確なエラーメッセージで起動を中断
-    #   例: "Configuration error: KEYCLOAK_URL is required"

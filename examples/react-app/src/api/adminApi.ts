@@ -185,3 +185,22 @@ export async function updateMfaSettings(
 export async function getMfaStatus(token: string): Promise<MfaStatus> {
   return request<MfaStatus>('/mfa-status', token, undefined, '/auth')
 }
+
+// ── Enriched users (app DB — includes group memberships) ──────────────────────
+
+export interface EnrichedUser {
+  id: string
+  email: string
+  displayName: string | null
+  roles: string[]
+  enabled: boolean
+  jobTitle: string | null
+  lastLoginAt: string | null
+  createdAt: string | null
+  tenantId: string
+  groups: string[]
+}
+
+export async function listUsersWithGroups(token: string): Promise<EnrichedUser[]> {
+  return request<EnrichedUser[]>('/users-with-groups', token)
+}

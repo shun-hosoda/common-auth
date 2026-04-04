@@ -56,19 +56,39 @@ Keycloak（Docker）をIdPとして採用し、認証ロジックの自前実装
 
 ## 4. API設計（Backend SDK提供）
 
+### 認証ルーター（/auth）
+
 | メソッド | パス | 説明 | 認証 |
 |---------|------|------|------|
 | GET | `/auth/me` | 現在のユーザー情報取得 | 必要 |
 | GET | `/auth/health` | Auth Stack死活監視 | 不要 |
-| POST | `/auth/logout` | トークン失効（Keycloak連携） | 必要 |
+| POST | `/auth/logout` | ログアウト（ログ記録のみ。実際のトークン失効はフロントエンドOIDC signoutRedirectで処理） | 必要 |
+| GET | `/auth/mfa-status` | MFA設定状態の取得 | 必要 |
+
+### Admin API（/api/admin） — Backend SDKに内蔵
+
+| メソッド | パス | 説明 | 認証 |
+|---------|------|------|------|
+| GET | `/api/admin/users` | テナント内ユーザー一覧 | tenant_admin以上 |
+| POST | `/api/admin/users` | ユーザー新規作成 | tenant_admin以上 |
+| GET | `/api/admin/users/{user_id}` | ユーザー詳細取得 | tenant_admin以上 |
+| PUT | `/api/admin/users/{user_id}` | ユーザー情報更新 | tenant_admin以上 |
+| DELETE | `/api/admin/users/{user_id}` | ユーザー無効化（論理削除） | tenant_admin以上 |
+| POST | `/api/admin/users/{user_id}/reset-password` | パスワードリセット | tenant_admin以上 |
+| POST | `/api/admin/users/{user_id}/reset-mfa` | MFAリセット | tenant_admin以上 |
+| GET | `/api/admin/clients` | テナント一覧 | super_admin |
+| POST | `/api/admin/clients` | テナント作成 | super_admin |
+
+> Admin APIは `setup_auth()` で自動マウントされる。Keycloak Admin REST APIを`admin-api-client`（client_credentials grant）経由でプロキシする。
 
 ## 5. DB設計方針
 
 - **認証データ**: Keycloak内部DB（パスワード、MFA等）→ 業務DBに保持しない
-- **業務DB**: `tenants`テーブル + `user_profiles`テーブル（推奨パターン）
+- **業務DB**: `tenants` + `user_profiles` + グループ・権限管理テーブル群
 - `user_profiles.id` = Keycloakの `sub` クレーム（不変UUID）
-- Lazy Sync（JWT検証時にupsert）はオプトイン
-- RLSポリシーテンプレートを提供
+- Lazy Sync（JWT検証時にupsert）はオプトイン（`ENABLE_USER_SYNC=true`で有効化）
+- RLSポリシーテンプレートを提供（`NULLIF` + `current_setting('app.current_tenant_id', true)` による安全な実装）
+- グループ・権限管理: `tenant_groups`, `user_group_memberships`, `permissions`, `group_permissions`, `user_permissions`
 
 ## 6. マルチテナント設計
 
@@ -107,10 +127,12 @@ npm install @common-auth/react   # Frontend SDK
 ```
 common-auth/
 ├── auth-stack/                 # Keycloakデプロイ構成
-│   ├── docker-compose.yml
+│   ├── docker-compose.yml      # 4サービス: keycloak, keycloak-db, app-db, mailhog
 │   ├── .env.example
-│   └── keycloak/
-│       └── realm-export.json
+│   ├── keycloak/
+│   │   └── realm-export.json
+│   └── postgres/
+│       └── init.sql            # 業務DB初期化（テーブル・RLS・テストデータ）
 ├── packages/
 │   ├── frontend-sdk/           # @common-auth/react
 │   └── backend-sdk/            # common-auth (Python)
@@ -120,6 +142,15 @@ common-auth/
 ├── docs/
 └── tests/
 ```
+
+### Docker Compose構成（auth-stack）
+
+| サービス | イメージ | ポート | 用途 |
+|---------|---------|--------|------|
+| keycloak | quay.io/keycloak/keycloak:24.0 | 8080 | IdP |
+| keycloak-db | postgres:16-alpine | (内部) | Keycloak用DB |
+| app-db | postgres:16-alpine | 5433 | 業務用DB（RLS・テストデータ） |
+| mailhog | mailhog/mailhog:v1.0.1 | 1025/8025 | 開発用SMTPモック |
 
 ## 10. 関連ADR
 
