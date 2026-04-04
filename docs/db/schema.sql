@@ -219,3 +219,64 @@ GROUP BY ugm.user_id, p.tenant_id, p.resource, p.action;
 -- 補足: roles カラムについて
 -- Phase 1では TEXT[] で簡易実装。将来的にRBAC強化が必要な場合、
 -- roles テーブル + user_roles 中間テーブルへの正規化を検討する。
+
+-- -----------------------------------------------------------
+-- 招待トークン管理テーブル (Phase 4: ユーザー招待フロー)
+-- tenant_adminが発行する期限付き招待トークンを管理する。
+--
+-- 設計方針:
+--   - Keycloakユーザーは招待承諾時（遅延）に作成する（Option A）
+--   - 招待送信時点ではKeycloakを変更しない（DB記録のみ）
+--   - トークンは secrets.token_urlsafe(32) で生成（256bit エントロピー）
+--   - 同テナント・同メールのpending招待は同時に1件のみ許可（部分ユニーク制約）
+--   - 監査ログとして accepted/revoked 両方の時刻・実行者を保持する
+--
+-- ステータス遷移:
+--   pending → accepted  （招待承諾時）
+--   pending → expired   （expires_at 超過、APIアクセス時に判定）
+--   pending → revoked   （管理者による手動取消）
+-- -----------------------------------------------------------
+CREATE TABLE invitation_tokens (
+    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID         NOT NULL REFERENCES tenants(id)           ON DELETE CASCADE,
+    email           VARCHAR(255) NOT NULL,
+    token           VARCHAR(128) NOT NULL UNIQUE,
+        -- secrets.token_urlsafe(32) 生成値（43文字のURL-safe Base64）
+        -- DBには平文保存（トークン自体が十分にランダムなためHash化不要）
+    role            VARCHAR(50)  NOT NULL DEFAULT 'user'
+                                 CHECK (role IN ('user', 'tenant_admin')),
+    group_id        UUID         REFERENCES tenant_groups(id)              ON DELETE SET NULL,
+    invited_by      UUID         REFERENCES user_profiles(id)              ON DELETE SET NULL,
+        -- M-7修正: ON DELETE CASCADE → SET NULL
+        -- 招待者アカウント削除後も招待レコード（監査証跡）を保持する
+    custom_message  TEXT,
+    status          VARCHAR(20)  NOT NULL DEFAULT 'pending'
+                                 CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+    expires_at      TIMESTAMPTZ  NOT NULL,
+        -- 招待発行時: NOW() + expires_hours (デフォルト72h, 最大168h)
+    accepted_at     TIMESTAMPTZ,
+        -- 承諾完了時に記録
+    revoked_at      TIMESTAMPTZ,
+        -- M-8追加: 取消実行時刻（監査ログ用）
+    revoked_by      UUID         REFERENCES user_profiles(id)              ON DELETE SET NULL,
+        -- M-8追加: 取消実行者（監査ログ用）
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- インデックス
+CREATE INDEX idx_invitation_tokens_tenant_id ON invitation_tokens(tenant_id);
+CREATE INDEX idx_invitation_tokens_token     ON invitation_tokens(token);
+CREATE INDEX idx_invitation_tokens_email     ON invitation_tokens(tenant_id, email);
+CREATE INDEX idx_invitation_tokens_status    ON invitation_tokens(status, expires_at);
+
+-- 同テナント内で同メールのpending招待は1件のみ許可（部分ユニーク制約）
+-- revoked/accepted/expired は複数レコード存在可（履歴として保持）
+CREATE UNIQUE INDEX uq_invitation_pending
+    ON invitation_tokens(tenant_id, email)
+    WHERE status = 'pending';
+
+-- RLS: tenant_adminは自テナントのみ参照可能
+-- ※ Public Endpoint（accept/validate）はRLSバイパス用サービスアカウント接続を使用
+ALTER TABLE invitation_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON invitation_tokens
+    USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);

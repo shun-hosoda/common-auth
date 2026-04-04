@@ -27,20 +27,39 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     4. Sets request.state.user and request.state.tenant_id
     
     Unauthenticated requests return 401.
+
+    Paths listed in ``excluded_paths`` are skipped entirely (Public endpoints
+    such as the invitation accept/validate APIs).
     """
 
-    def __init__(self, app, config: AuthConfig) -> None:
+    #: Paths that never require authentication.
+    #: Exact prefix-match: a path is excluded if it starts with any entry.
+    DEFAULT_EXCLUDED_PREFIXES: tuple[str, ...] = (
+        "/auth/health",
+        "/api/invitations/validate",
+        "/api/invitations/accept",
+    )
+
+    def __init__(
+        self,
+        app,
+        config: AuthConfig,
+        *,
+        extra_excluded_prefixes: tuple[str, ...] = (),
+    ) -> None:
         """
         Initialize JWT authentication middleware.
         
         Args:
             app: FastAPI application
             config: Authentication configuration
+            extra_excluded_prefixes: Additional path prefixes to skip auth for.
         """
         super().__init__(app)
         self.config = config
         self.jwks_service = RemoteJWKSService(config)
-        logger.info("Initialized JWTAuthMiddleware")
+        self._excluded = self.DEFAULT_EXCLUDED_PREFIXES + extra_excluded_prefixes
+        logger.info("Initialized JWTAuthMiddleware (excluded: %s)", self._excluded)
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
@@ -53,8 +72,8 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         Returns:
             Response
         """
-        # Skip authentication for health check endpoints
-        if request.url.path == "/auth/health":
+        # Skip authentication for excluded paths (health check, public invitation API, etc.)
+        if any(request.url.path.startswith(prefix) for prefix in self._excluded):
             return await call_next(request)
         
         # Extract token from Authorization header

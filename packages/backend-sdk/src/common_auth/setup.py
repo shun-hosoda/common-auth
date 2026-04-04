@@ -8,6 +8,8 @@ from common_auth.middleware.tenant import TenantMiddleware
 from common_auth.middleware.rate_limit import RateLimitMiddleware, RateLimitStore
 from common_auth.routers.auth import router as auth_router
 from common_auth.routers.admin import router as admin_router
+from common_auth.routers.invitation import router as invitation_router
+from common_auth.services.email_service import EmailService
 
 
 def setup_auth(
@@ -40,6 +42,16 @@ def setup_auth(
         ```
     """
     app.state.auth_config = config
+
+    # EmailService — used by invitation router
+    app.state.email_service = EmailService(
+        smtp_host=config.smtp_host,
+        smtp_port=config.smtp_port,
+        from_addr=config.smtp_from,
+        use_tls=config.smtp_use_tls,
+        username=config.smtp_username,
+        password=config.smtp_password,
+    )
     
     # Middleware execution order: SecurityHeaders -> RateLimit -> JWTAuth -> Tenant
     # Added in reverse order because Starlette executes them LIFO.
@@ -67,3 +79,8 @@ def setup_auth(
 
     # Mount admin router (lazy — KeycloakAdminClient is created on first use)
     app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+
+    # Mount invitation router (Public endpoints + admin invitation management)
+    # /api/invitations/validate and /api/invitations/accept are JWT-excluded
+    # Public endpoints; /api/admin/invitations/* require tenant_admin JWT.
+    app.include_router(invitation_router, tags=["invitations"])

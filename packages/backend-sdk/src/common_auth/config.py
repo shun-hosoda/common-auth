@@ -47,6 +47,48 @@ class AuthConfig(BaseSettings):
         default=True,
         description="Enable rate limiting middleware"
     )
+
+    # SMTP / Email (for invitation mails)
+    smtp_host: str = Field(
+        default="localhost",
+        description="SMTP server host"
+    )
+    smtp_port: int = Field(
+        default=1025,
+        description="SMTP server port"
+    )
+    smtp_from: str = Field(
+        default="noreply@example.com",
+        description="From address for invitation emails"
+    )
+    smtp_use_tls: bool = Field(
+        default=False,
+        description="Use STARTTLS for SMTP"
+    )
+    smtp_username: str | None = Field(
+        default=None,
+        description="SMTP auth username (optional)"
+    )
+    smtp_password: str | None = Field(
+        default=None,
+        description="SMTP auth password (optional)"
+    )
+
+    # User invitation settings
+    invitation_base_url: str = Field(
+        default="http://localhost:5173",
+        description="Base URL for invitation accept links (e.g. https://app.example.com)"
+    )
+    invitation_expires_hours: int = Field(
+        default=72,
+        ge=1,
+        le=168,
+        description="Default invitation token TTL in hours (max 168h = 7 days)"
+    )
+    keycloak_pw_policy_hint: str = Field(
+        default="8文字以上入力してください",
+        description="Password policy hint displayed on the invitation accept page"
+    )
     rate_limit_default_requests: int = Field(
         default=60,
         ge=1,

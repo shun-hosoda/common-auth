@@ -320,6 +320,174 @@ paths:
         "403":
           description: super_admin権限が必要
 
+  # ── Admin Invitation Endpoints (/api/admin/invitations) ─────────────────
+
+  /api/admin/invitations:
+    get:
+      summary: 招待一覧取得（pending/expired/accepted/revokedを含む全件）
+      operationId: listInvitations
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, accepted, expired, revoked]
+          description: ステータスでフィルタリング（省略時は全件）
+      responses:
+        "200":
+          description: 招待一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvitationResponse"
+        "403":
+          description: 権限不足（tenant_admin以上が必要）
+    post:
+      summary: 招待発行（最大50件一括）
+      description: |
+        メールアドレスを最大50件一括指定して招待メールを送信する。
+        既存ユーザーや pending 招待が存在するアドレスは failed に分類する（Best-effort）。
+        メール送信は Backend SDK の EmailService 経由で SMTP 直接送信する。
+      operationId: createInvitations
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationBulkRequest"
+      responses:
+        "200":
+          description: Best-effortで処理。succeeded/failed を返す
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationBulkResponse"
+        "403":
+          description: 権限不足
+
+  /api/admin/invitations/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      summary: 招待取消（status → revoked）
+      operationId: revokeInvitation
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+        "404":
+          description: 招待が見つからない、またはテナント境界違反
+        "409":
+          description: すでに承諾済みまたは取消済み
+
+  /api/admin/invitations/{id}/resend:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 招待再送（旧トークン revoked → 新トークン発行 → 再送信）
+      description: |
+        既存の pending/expired 招待を revoked にし、新しいトークンで招待を再発行する。
+        uq_invitation_pending 制約により旧レコードを revoked にしてから新レコードを INSERT する。
+      operationId: resendInvitation
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 再送成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationResponse"
+        "404":
+          description: 招待が見つからない
+        "409":
+          description: すでに承諾済みの招待は再送不可
+
+  # ── Public Invitation Endpoints (/api/invitations) ─────────────────────
+  # 認証不要・Rate Limited（validate: 10req/min, accept: 5req/min per IP）
+
+  /api/invitations/validate:
+    get:
+      summary: 招待トークン検証（Public）
+      description: |
+        トークンの有効性を検証し、招待情報を返す。
+        無効・期限切れ・使用済みは全て 404 を返す（情報漏洩防止）。
+        Rate Limit: 10 req/min per IP。
+      operationId: validateInvitation
+      tags: [invitations]
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 有効なトークン
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationValidateResponse"
+        "404":
+          description: トークンが無効・期限切れ・使用済み（区別しない）
+
+  /api/invitations/accept:
+    post:
+      summary: 招待承諾（ユーザー作成 + パスワード設定）Public
+      description: |
+        招待トークンを使ってアカウントを作成する。
+        処理: トークン検証 → Keycloakユーザー作成(enabled=true) → PW設定 → ロール付与
+             → DB user_profiles INSERT → グループ追加 → token status=accepted。
+        MFA: テナントMFA=ON の場合、KC requiredActions に CONFIGURE_TOTP を付与。
+             ユーザーは次回ログイン時に TOTP 設定が強制される。
+        Rate Limit: 5 req/min per IP。
+      operationId: acceptInvitation
+      tags: [invitations]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationAcceptRequest"
+      responses:
+        "200":
+          description: 承諾成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationAcceptResponse"
+        "404":
+          description: トークンが無効・期限切れ・使用済み
+        "422":
+          description: パスワードが Keycloak PW Policy に違反（詳細をレスポンスに含む）
+
 components:
   securitySchemes:
     bearerAuth:
@@ -504,3 +672,159 @@ components:
         detail:
           type: string
           description: 詳細情報（開発環境のみ）
+
+    # ── Invitation schemas ──────────────────────────────────────────────────
+
+    InvitationCreateItem:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        role:
+          type: string
+          enum: [user, tenant_admin]
+          default: user
+        group_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    InvitationBulkRequest:
+      type: object
+      required: [invitations]
+      properties:
+        invitations:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitationCreateItem"
+          minItems: 1
+          maxItems: 50
+        custom_message:
+          type: string
+          nullable: true
+          description: 招待メールに含めるカスタムメッセージ
+        expires_hours:
+          type: integer
+          default: 72
+          minimum: 1
+          maximum: 168
+          description: 招待有効期限（時間）。デフォルト72h、最大168h(7日)
+
+    InvitationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [user, tenant_admin]
+        group_id:
+          type: string
+          format: uuid
+          nullable: true
+        invited_by:
+          type: string
+          nullable: true
+          description: 招待者の表示名（招待者アカウント削除後はnull）
+        status:
+          type: string
+          enum: [pending, accepted, expired, revoked]
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    InvitationFailedItem:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        reason:
+          type: string
+          enum: [already_member, pending_exists, smtp_error, invalid_email]
+          description: |
+            already_member: すでにテナントのKCユーザーとして存在する
+            pending_exists: 同メールの pending 招待が既に存在する
+            smtp_error: メール送信失敗
+            invalid_email: メールアドレス形式不正
+
+    InvitationBulkResponse:
+      type: object
+      properties:
+        succeeded:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitationResponse"
+        failed:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitationFailedItem"
+
+    InvitationValidateResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [user, tenant_admin]
+        tenant_name:
+          type: string
+        invited_by_name:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+
+    InvitationAcceptRequest:
+      type: object
+      required: [token, display_name, password]
+      properties:
+        token:
+          type: string
+          description: 招待トークン（URL の ?token= から取得）
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: ユーザーの表示名
+        password:
+          type: string
+          minLength: 8
+          description: パスワード（Keycloak PW Policyに準拠する必要がある）
+
+    InvitationAcceptResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "アカウントの作成が完了しました"
+        email:
+          type: string
+          format: email
+        mfa_required:
+          type: boolean
+          description: テナントMFA=ONの場合 true。ログイン後に CONFIGURE_TOTP が要求される

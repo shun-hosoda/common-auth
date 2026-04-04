@@ -213,6 +213,44 @@ CREATE POLICY tenant_isolation ON user_permissions
         )
     );
 
+-- =============================================================
+-- invitation_tokens テーブル（Phase 4: 招待フロー）
+-- =============================================================
+-- invitation_tokens: ユーザー招待トークン管理
+-- Option A: KC ユーザーは招待受諾時のみ作成（招待時は未作成）
+CREATE TABLE IF NOT EXISTS invitation_tokens (
+    id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID            NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    email           VARCHAR(255)    NOT NULL,
+    token           VARCHAR(128)    NOT NULL UNIQUE,
+    role            VARCHAR(50)     NOT NULL DEFAULT 'user'
+                        CHECK (role IN ('user', 'tenant_admin')),
+    group_id        UUID            REFERENCES tenant_groups(id) ON DELETE SET NULL,
+    invited_by      UUID            REFERENCES user_profiles(id) ON DELETE SET NULL,
+    custom_message  TEXT,
+    status          VARCHAR(20)     NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+    expires_at      TIMESTAMPTZ     NOT NULL,
+    accepted_at     TIMESTAMPTZ,
+    revoked_at      TIMESTAMPTZ,
+    revoked_by      UUID            REFERENCES user_profiles(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+-- 同一テナントへの同一メールの重複招待を防ぐ部分ユニークインデックス
+CREATE UNIQUE INDEX IF NOT EXISTS uq_invitation_pending
+    ON invitation_tokens(tenant_id, email)
+    WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_invitation_tokens_token ON invitation_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_invitation_tokens_tenant_id ON invitation_tokens(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_invitation_tokens_email ON invitation_tokens(email);
+
+ALTER TABLE invitation_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON invitation_tokens;
+CREATE POLICY tenant_isolation ON invitation_tokens
+    USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
+
 -- システム共通権限プリセット
 INSERT INTO permissions (tenant_id, resource, action, description, is_system) VALUES
     (NULL, 'users',    'read',   'ユーザー一覧・詳細の参照',                  TRUE),

@@ -204,3 +204,137 @@ export interface EnrichedUser {
 export async function listUsersWithGroups(token: string): Promise<EnrichedUser[]> {
   return request<EnrichedUser[]>('/users-with-groups', token)
 }
+
+// ── Invitation types ──────────────────────────────────────────────────────────
+
+export interface InvitationResponse {
+  id: string
+  tenant_id: string
+  email: string
+  role: 'user' | 'tenant_admin'
+  group_id: string | null
+  invited_by: string | null
+  custom_message: string | null
+  status: 'pending' | 'accepted' | 'expired' | 'revoked'
+  effective_status: 'pending' | 'accepted' | 'expired' | 'revoked'
+  expires_at: string
+  accepted_at: string | null
+  revoked_at: string | null
+  revoked_by: string | null
+  created_at: string
+}
+
+export interface InvitationCreateItem {
+  email: string
+  role?: 'user' | 'tenant_admin'
+  group_id?: string
+}
+
+export interface InvitationBulkRequest {
+  invitations: InvitationCreateItem[]
+  /** S-5 fix: custom_message is a bulk-level field, not per-recipient */
+  custom_message?: string
+}
+
+export interface InvitationFailedItem {
+  email: string
+  reason: string
+}
+
+export interface InvitationBulkResponse {
+  succeeded: InvitationResponse[]
+  failed: InvitationFailedItem[]
+}
+
+export interface InvitationValidateResponse {
+  valid: boolean
+  email: string
+  role: string
+  tenant_display_name: string
+  inviter_display_name: string | null
+  custom_message: string | null
+  mfa_required: boolean
+  password_policy_hint: string | null
+}
+
+export interface InvitationAcceptRequest {
+  token: string
+  display_name: string
+  password: string
+}
+
+export interface InvitationAcceptResponse {
+  status: string
+  mfa_required: boolean
+  mfa_method: string | null
+}
+
+// ── Invitation operations (admin) ─────────────────────────────────────────────
+
+export async function listInvitations(
+  token: string,
+  status?: string,
+): Promise<InvitationResponse[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+  return request<InvitationResponse[]>(`/invitations${qs}`, token)
+}
+
+export async function createInvitations(
+  token: string,
+  body: InvitationBulkRequest,
+): Promise<InvitationBulkResponse> {
+  return request<InvitationBulkResponse>('/invitations', token, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function revokeInvitation(
+  token: string,
+  id: string,
+): Promise<InvitationResponse> {
+  return request<InvitationResponse>(`/invitations/${id}`, token, { method: 'DELETE' })
+}
+
+export async function resendInvitation(
+  token: string,
+  id: string,
+): Promise<InvitationResponse> {
+  return request<InvitationResponse>(`/invitations/${id}/resend`, token, { method: 'POST' })
+}
+
+// ── Invitation operations (public — no auth token) ────────────────────────────
+
+const PUBLIC_BASE = '/api/invitations'
+
+async function publicRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${PUBLIC_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers ?? {}),
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Invitation API error ${res.status}: ${text}`)
+  }
+  return res.json() as Promise<T>
+}
+
+export async function validateInvitationToken(
+  token: string,
+): Promise<InvitationValidateResponse> {
+  return publicRequest<InvitationValidateResponse>(
+    `/validate?token=${encodeURIComponent(token)}`,
+  )
+}
+
+export async function acceptInvitation(
+  body: InvitationAcceptRequest,
+): Promise<InvitationAcceptResponse> {
+  return publicRequest<InvitationAcceptResponse>('/accept', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}

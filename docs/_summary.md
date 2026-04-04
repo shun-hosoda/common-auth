@@ -19,6 +19,7 @@
 | 2b | Frontend SDK (React Hooks) | ✅ 完了 |
 | 3 | ユーザー管理UI (Custom React + Admin API), Keycloak Themes | ✅ 完了 |
 | 3.5 | テナントMFAポリシー管理 | ✅ 完了 |
+| 4 | ユーザー招待フロー（招待制ユーザー登録） | 🔧 設計済み・実装待ち |
 
 ## 主要ADR
 
@@ -134,7 +135,36 @@ auth-stack/keycloak/
 
 ## 次のタスク
 
-Phase 3.5は完了済み。今後の拡張候補:
+Phase 3.5は完了済み。Phase 4（招待フロー）設計完了・実装待ち。
+
+### Phase 4: ユーザー招待フロー（設計完了）
+
+追加ファイル:
+```
+packages/backend-sdk/src/common_auth/
+├── routers/invitation.py         # Public招待API (/api/invitations/*)
+├── services/email_service.py     # SMTP直接送信サービス
+└── dependencies/db.py            # db_pool / RLSバイパス接続の依存注入
+
+examples/react-app/src/
+├── pages/InviteUsers.tsx          # 招待発行画面 (/admin/users/invite)
+├── pages/AdminInvitations.tsx     # 招待一覧管理 (/admin/invitations)
+└── pages/InviteAccept.tsx         # 招待承諾画面 (/invite/accept?token=xxx, Public)
+
+alembic/versions/xxx_add_invitation_tokens.py  # DBマイグレーション
+```
+
+追加環境変数:
+```env
+SMTP_HOST=mailhog
+SMTP_PORT=1025
+SMTP_FROM=noreply@example.com
+INVITATION_BASE_URL=http://localhost:5173
+INVITATION_EXPIRES_HOURS=72
+KEYCLOAK_PW_POLICY_HINT=8文字以上、英数字を含む必要があります
+```
+
+今後の拡張候補:
 - 信頼済みデバイス（Cookie）MFAスキップの有効化
 - メールOTPプロバイダーの実装
 - E2Eテストの拡充
@@ -176,4 +206,4 @@ docs/design/
 
 ---
 
-*最終更新: 2026-03-30*
+*最終更新: 2026-04-04*

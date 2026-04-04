@@ -7,12 +7,30 @@ import AdminUsers from './pages/AdminUsers'
 import AdminClients from './pages/AdminClients'
 import SecuritySettings from './pages/SecuritySettings'
 import PersonalSecuritySettings from './pages/PersonalSecuritySettings'
+import InviteUsers from './pages/InviteUsers'
+import AdminInvitations from './pages/AdminInvitations'
+import InviteAccept from './pages/InviteAccept'
+
+const ADMIN_UNAUTHORIZED = (
+  <div className="container">
+    <div className="section">
+      <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
+        <h2>アクセス権限がありません</h2>
+        <p style={{ color: 'var(--text-muted)' }}>この画面を表示するにはtenant_admin以上の権限が必要です。</p>
+      </div>
+    </div>
+  </div>
+)
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/callback" element={<Callback />} />
+
+      {/* Public invitation accept page — NO AuthGuard */}
+      <Route path="/invite/accept" element={<InviteAccept />} />
+
       <Route path="/dashboard" element={
         <AuthGuard fallback={<div className="loading">Loading...</div>}>
           <Dashboard />
@@ -22,34 +40,34 @@ function App() {
         <AuthGuard
           fallback={<div className="loading">Loading...</div>}
           requiredRoles={['tenant_admin', 'super_admin']}
-          unauthorizedFallback={
-            <div className="container">
-              <div className="section">
-                <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-                  <h2>アクセス権限がありません</h2>
-                  <p style={{ color: 'var(--text-muted)' }}>この画面を表示するにはtenant_admin以上の権限が必要です。</p>
-                </div>
-              </div>
-            </div>
-          }
+          unauthorizedFallback={ADMIN_UNAUTHORIZED}
         >
           <AdminUsers />
+        </AuthGuard>
+      } />
+      <Route path="/admin/users/invite" element={
+        <AuthGuard
+          fallback={<div className="loading">Loading...</div>}
+          requiredRoles={['tenant_admin', 'super_admin']}
+          unauthorizedFallback={ADMIN_UNAUTHORIZED}
+        >
+          <InviteUsers />
+        </AuthGuard>
+      } />
+      <Route path="/admin/invitations" element={
+        <AuthGuard
+          fallback={<div className="loading">Loading...</div>}
+          requiredRoles={['tenant_admin', 'super_admin']}
+          unauthorizedFallback={ADMIN_UNAUTHORIZED}
+        >
+          <AdminInvitations />
         </AuthGuard>
       } />
       <Route path="/security" element={
         <AuthGuard
           fallback={<div className="loading">Loading...</div>}
           requiredRoles={['tenant_admin', 'super_admin']}
-          unauthorizedFallback={
-            <div className="container">
-              <div className="section">
-                <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-                  <h2>アクセス権限がありません</h2>
-                  <p style={{ color: 'var(--text-muted)' }}>この画面を表示するにはtenant_admin以上の権限が必要です。</p>
-                </div>
-              </div>
-            </div>
-          }
+          unauthorizedFallback={ADMIN_UNAUTHORIZED}
         >
           <SecuritySettings />
         </AuthGuard>

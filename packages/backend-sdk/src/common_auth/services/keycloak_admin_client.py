@@ -181,6 +181,28 @@ class KeycloakAdminClient:
         )
         resp.raise_for_status()
 
+    async def delete_user(self, user_id: str) -> None:
+        """Permanently delete a Keycloak user.
+
+        Used as a compensation action when the invitation accept flow fails
+        after Keycloak user creation but before DB commit (NEW-1).
+        A 404 is treated as success (user already absent).
+        """
+        resp = await self._request("DELETE", f"/users/{user_id}")
+        if resp.status_code not in (204, 404):
+            resp.raise_for_status()
+
+    async def find_users_by_email(self, email: str) -> list[dict[str, Any]]:
+        """Return users with an exact email match.
+
+        Uses Keycloak’s ``?email=&exact=true`` query to avoid false positives.
+        """
+        resp = await self._request(
+            "GET", "/users", params={"email": email, "exact": "true"}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def reset_password(
         self,
         user_id: str,
