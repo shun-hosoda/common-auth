@@ -379,7 +379,7 @@ export default function AdminInvitations() {
               招待管理
             </h1>
             <button
-              onClick={() => navigate('/admin/users/invite')}
+              onClick={() => navigate('/admin/users?invite=1')}
               style={{
                 padding: '10px 20px',
                 background: t.primary,
@@ -475,7 +475,7 @@ export default function AdminInvitations() {
               <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
               <p>招待はありません</p>
               <button
-                onClick={() => navigate('/admin/users/invite')}
+                onClick={() => navigate('/admin/users?invite=1')}
                 style={{
                   marginTop: 8,
                   padding: '10px 20px',

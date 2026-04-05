@@ -7,7 +7,6 @@ import AdminUsers from './pages/AdminUsers'
 import AdminClients from './pages/AdminClients'
 import SecuritySettings from './pages/SecuritySettings'
 import PersonalSecuritySettings from './pages/PersonalSecuritySettings'
-import InviteUsers from './pages/InviteUsers'
 import AdminInvitations from './pages/AdminInvitations'
 import InviteAccept from './pages/InviteAccept'
 
@@ -43,15 +42,6 @@ function App() {
           unauthorizedFallback={ADMIN_UNAUTHORIZED}
         >
           <AdminUsers />
-        </AuthGuard>
-      } />
-      <Route path="/admin/users/invite" element={
-        <AuthGuard
-          fallback={<div className="loading">Loading...</div>}
-          requiredRoles={['tenant_admin', 'super_admin']}
-          unauthorizedFallback={ADMIN_UNAUTHORIZED}
-        >
-          <InviteUsers />
         </AuthGuard>
       } />
       <Route path="/admin/invitations" element={

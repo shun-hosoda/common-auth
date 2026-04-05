@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 import {
   type AdminUser,
   type EnrichedUser,
   type CreateUserInput,
   type UpdateUserInput,
+  type InvitationBulkResponse,
   listUsers,
   listUsersWithGroups,
   createUser,
+  createInvitations,
   getUser,
   updateUser,
   disableUser,
@@ -41,6 +43,11 @@ const modalBox: React.CSSProperties = {
 const mfaModalBox: React.CSSProperties = {
   background: t.surface, borderRadius: 12, padding: '2rem',
   width: '100%', maxWidth: 400,
+  boxShadow: t.shadowMd,
+}
+const inviteModalBox: React.CSSProperties = {
+  background: t.surface, borderRadius: 12, padding: '2rem',
+  width: '100%', maxWidth: 560,
   boxShadow: t.shadowMd,
 }
 
@@ -189,6 +196,7 @@ const toEditForm = (u: AdminUser): EditForm => ({
 export default function AdminUsers() {
   const { user, logout, hasRole, getAccessToken } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -223,6 +231,14 @@ export default function AdminUsers() {
   const [createForm, setCreateForm] = useState<CreateForm>(emptyCreate())
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteEmailsText, setInviteEmailsText] = useState('')
+  const [inviteRole, setInviteRole] = useState<'user' | 'tenant_admin'>('user')
+  const [inviteCustomMessage, setInviteCustomMessage] = useState('')
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteResult, setInviteResult] = useState<InvitationBulkResponse | null>(null)
+  const [inviting, setInviting] = useState(false)
 
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null)
   const [editForm, setEditForm] = useState<EditForm | null>(null)
@@ -393,6 +409,62 @@ export default function AdminUsers() {
       setCreateError(e instanceof Error ? e.message : '作成に失敗しました')
     } finally {
       setCreating(false)
+    }
+  }
+
+  const inviteEmails = useMemo(() => {
+    return inviteEmailsText
+      .split(/[\n,;]+/)
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0)
+  }, [inviteEmailsText])
+
+  const openInviteModal = () => {
+    setInviteError(null)
+    setInviteResult(null)
+    setInviteEmailsText('')
+    setInviteRole('user')
+    setInviteCustomMessage('')
+    setShowInvite(true)
+  }
+
+  useEffect(() => {
+    if (searchParams.get('invite') !== '1') return
+    openInviteModal()
+    const next = new URLSearchParams(searchParams)
+    next.delete('invite')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const handleInviteSubmit = async () => {
+    const token = getAccessToken()
+    if (!token) return
+    if (inviteEmails.length === 0) {
+      setInviteError('メールアドレスを1件以上入力してください')
+      return
+    }
+    if (inviteEmails.length > 50) {
+      setInviteError('一度に招待できるのは50件までです')
+      return
+    }
+
+    setInviting(true)
+    setInviteError(null)
+    setInviteResult(null)
+    try {
+      const res = await createInvitations(token, {
+        invitations: inviteEmails.map((email) => ({ email, role: inviteRole })),
+        custom_message: inviteCustomMessage.trim() || undefined,
+      })
+      setInviteResult(res)
+
+      if (res.failed.length === 0) {
+        setShowInvite(false)
+      }
+    } catch (e) {
+      setInviteError(e instanceof Error ? e.message : '招待の送信に失敗しました')
+    } finally {
+      setInviting(false)
     }
   }
 
@@ -576,7 +648,7 @@ export default function AdminUsers() {
               )}
             </h1>
             <button
-              onClick={() => { setCreateForm(emptyCreate()); setCreateError(null); setShowCreate(true) }}
+              onClick={openInviteModal}
               style={{
                 padding: '8px 16px', borderRadius: t.radiusMd,
                 background: t.primary, color: t.textInverse,
@@ -584,7 +656,7 @@ export default function AdminUsers() {
                 fontSize: '0.875rem', fontWeight: 600,
               }}
             >
-              + ユーザー追加
+              + ユーザーを招待
             </button>
           </div>
 
@@ -846,6 +918,132 @@ export default function AdminUsers() {
               <button onClick={handleCreate} disabled={creating}
                 style={{ padding: '8px 20px', borderRadius: t.radiusMd, background: t.primary, color: t.textInverse, border: 'none', cursor: creating ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, opacity: creating ? 0.6 : 1 }}>
                 {creating ? '作成中...' : '追加する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invite Modal ──────────────────────────────────────────────────── */}
+      {showInvite && (
+        <div style={overlay} onClick={(e) => { if (e.target === e.currentTarget && !inviting) setShowInvite(false) }}>
+          <div style={inviteModalBox}>
+            <h2 style={{ margin: '0 0 1rem 0' }}>ユーザー招待</h2>
+            <p style={{ margin: '0 0 1rem 0', color: t.textMuted, fontSize: '0.875rem' }}>
+              メールアドレスをカンマまたは改行で区切って入力してください（最大50件）。
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                  メールアドレス <span style={{ color: t.danger }}>*</span>
+                </span>
+                <textarea
+                  value={inviteEmailsText}
+                  onChange={(e) => setInviteEmailsText(e.target.value)}
+                  rows={4}
+                  placeholder={'user1@example.com\nuser2@example.com'}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.75rem',
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 8,
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                  }}
+                />
+                <span style={{ fontSize: '0.8rem', color: t.textMuted }}>{inviteEmails.length} 件</span>
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>権限</span>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as 'user' | 'tenant_admin')}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.75rem',
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 8,
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    background: t.surface,
+                    color: t.text,
+                  }}
+                >
+                  <option value="user">一般ユーザー</option>
+                  <option value="tenant_admin">テナント管理者</option>
+                </select>
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>メッセージ（任意）</span>
+                <textarea
+                  value={inviteCustomMessage}
+                  onChange={(e) => setInviteCustomMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="招待メールに添えるメッセージ"
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.75rem',
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 8,
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                  }}
+                />
+              </label>
+
+              {inviteError && (
+                <div style={{ color: t.danger, fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
+                  {inviteError}
+                </div>
+              )}
+
+              {inviteResult && (
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                  <div style={{ color: '#166534', fontSize: '0.875rem', background: '#dcfce7', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
+                    送信成功: {inviteResult.succeeded.length}件
+                  </div>
+                  {inviteResult.failed.length > 0 && (
+                    <div style={{ color: '#991b1b', fontSize: '0.875rem', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
+                      送信失敗: {inviteResult.failed.length}件
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '1.2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                onClick={() => setShowInvite(false)}
+                disabled={inviting}
+                style={{
+                  padding: '8px 16px', borderRadius: t.radiusMd,
+                  background: 'none', border: `1px solid ${t.border}`,
+                  fontSize: '0.875rem', cursor: inviting ? 'not-allowed' : 'pointer',
+                  color: t.text, opacity: inviting ? 0.5 : 1,
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleInviteSubmit}
+                disabled={inviting || inviteEmails.length === 0}
+                style={{
+                  padding: '8px 20px', borderRadius: t.radiusMd,
+                  background: t.primary, color: t.textInverse, border: 'none',
+                  cursor: inviting || inviteEmails.length === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '0.875rem', fontWeight: 600,
+                  opacity: inviting || inviteEmails.length === 0 ? 0.6 : 1,
+                }}
+              >
+                {inviting ? '送信中...' : `招待を送信 (${inviteEmails.length}件)`}
               </button>
             </div>
           </div>
