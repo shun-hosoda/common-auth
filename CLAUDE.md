@@ -19,14 +19,39 @@
 - 実装完了後 → **「✅ 実装完了。レビューを行う場合は『/review』を実行してください。」と出力して停止**
 - レビューAPPROVE後 → **「✅ レビュー承認済み。プッシュする場合は『/push』を実行してください。」と出力して停止**
 
+### /review 実行時の必須チェック
+
+**構造変更を含む `.tsx` / `.jsx` / `.ts` / `.py` ファイルがある場合、diff だけでなく該当ファイルの変更箇所の前後 30 行以上を必ず読み、ツリー構造・スコープの整合性を確認すること。**
+
+特に以下のパターンは構造破壊リスクが高いため、親要素まで遡って確認する:
+- JSX 式 `{condition && (...)}` 内への要素追加
+- `return (...)` 直下の兄弟要素追加
+- 既存ブロックの末尾 `)}` 付近への挿入
+
+**型・コンパイルチェックをレビューの一部として実行する:**
+
+```powershell
+# TypeScript (frontend-sdk / react-app)
+npx tsc --noEmit -p packages/frontend-sdk/tsconfig.json
+npx tsc --noEmit -p examples/react-app/tsconfig.json
+
+# Python (backend-sdk)
+cd packages/backend-sdk && python -m mypy src/ --ignore-missing-imports 2>&1 | tail -5
+```
+
+コンパイルエラーが出た場合は APPROVE せず即時修正してから再レビューする。
+
+---
+
 ### /push 実行フロー
 
 ```
 1. git status で .env 等のシークレットが混入していないことを確認する
-2. 対象ファイルを git add する
-3. git commit -m "<コミットメッセージ>" を実行する
-4. git push origin <ブランチ> を実行する
-5. 完了後「✅ Push完了」を出力して終了する
+2. 変更に .tsx/.jsx/.ts/.py が含まれる場合は tsc --noEmit でコンパイルエラーがないことを確認する
+3. 対象ファイルを git add する
+4. git commit -m "<コミットメッセージ>" を実行する
+5. git push origin <ブランチ> を実行する
+6. 完了後「✅ Push完了」を出力して終了する
 ```
 
 > ユーザーの許可確認は不要。/push コマンドの受信をもって実行許可とみなす。
@@ -430,6 +455,44 @@ Write-Host 'Fixed. ブラウザで再ログインしてください。'
 
 ---
 
+### P8: JSX `{condition && (...)}` 内への複数要素追加でコンパイルエラー
+
+**症状**: `npm run dev` 起動時に esbuild が `Expected ")" but found "{"` を出力してサーバーが起動しない
+
+**根本原因**: JSX 式 `{condition && (...)}` の括弧内には単一の式しか置けない。
+既存ブロックの後ろに新しい `<div>` を追加すると、`&&` の右辺が複数要素になり構文エラーになる。
+
+**診断確認**:
+```powershell
+npx tsc --noEmit -p examples/react-app/tsconfig.json
+# ❌ 異常: JSX expressions must have one parent element など
+# ✅ 正常: エラーなし（0 件）
+```
+
+**自己修正**: 複数要素を `<>...</>` Fragment でラップする。
+
+```tsx
+{/* 修正前（エラー）*/}
+{!loading && (
+  <div>...</div>
+  <div>...</div>   // ← 2つ目が構文エラー
+)}
+
+{/* 修正後 */}
+{!loading && (
+  <>
+    <div>...</div>
+    <div>...</div>
+  </>
+)}
+```
+
+**AI レビュー時の必須確認**: `.tsx`/`.jsx` ファイルに要素追加を行う場合、
+diff だけでなく **変更箇所の前後 30 行以上を読み、囲んでいる JSX 式（`&&`・三項・`return`）が単一ルートかどうかを確認すること**。
+確認後に `tsc --noEmit` を実行してコンパイルエラーがないことを検証すること。
+
+---
+
 ### 起動前セルフチェックリスト
 
 作業開始時に以下を確認すること:
@@ -443,6 +506,7 @@ Write-Host 'Fixed. ブラウザで再ログインしてください。'
 [ ] examples/fastapi-app/.env が存在する（KC_ADMIN_* 含む）
 [ ] examples/react-app/.env が存在する
 [ ] GET /api/admin/users が 200 を返す (P6診断コマンドで確認)
+[ ] npx tsc --noEmit -p examples/react-app/tsconfig.json → エラーなし (P8参照)
 ```
 
 `docker-compose down -v` 後に再起動した場合は **P1・P2・P6 を必ず再診断すること**。

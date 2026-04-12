@@ -145,6 +145,7 @@ export default function PersonalSecuritySettings() {
           )}
 
           {!loading && (
+            <>
             <div style={{
               background: t.surface, border: `1px solid ${t.border}`,
               borderRadius: t.radiusLg, padding: '24px', boxShadow: t.shadowSm,
@@ -212,6 +213,7 @@ export default function PersonalSecuritySettings() {
                 現在のパスワードを知っている場合に使用します。パスワードを忘れた場合は、ログアウト後にログイン画面の「パスワードをお忘れの方」をご利用ください。
               </div>
             </div>
+            </>
           )}
         </main>
       </div>
