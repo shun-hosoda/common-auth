@@ -142,6 +142,19 @@ export function AuthProvider({
     window.location.href = resetUrl;
   }, [authority, clientId]);
 
+  // 認証済みユーザーによるパスワード変更（UPDATE_PASSWORD アクション）
+  // パスワードを忘れた場合（resetPassword）とは別フロー。
+  // oidc-client-ts の signinRedirect を経由することで state が保持され、
+  // Callback ページが正常にセッションを復元できる。
+  const changePassword = useCallback(async () => {
+    if (!user) {
+      throw new Error("User must be authenticated to change password");
+    }
+    await userManager.signinRedirect({
+      extraQueryParams: { kc_action: 'UPDATE_PASSWORD' },
+    });
+  }, [userManager, user]);
+
   const configureMFA = useCallback(async () => {
     if (!user) {
       throw new Error("User must be authenticated to configure MFA");
@@ -188,12 +201,13 @@ export function AuthProvider({
       logout,
       register,
       resetPassword,
+      changePassword,
       configureMFA,
       handleCallback,
       getAccessToken,
       hasRole,
     }),
-    [user, isLoading, error, login, logout, register, resetPassword, configureMFA, handleCallback, getAccessToken, hasRole]
+    [user, isLoading, error, login, logout, register, resetPassword, changePassword, configureMFA, handleCallback, getAccessToken, hasRole]
   );
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

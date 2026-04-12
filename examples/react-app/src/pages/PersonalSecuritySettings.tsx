@@ -13,7 +13,7 @@ import {
 } from '../components/layout'
 
 export default function PersonalSecuritySettings() {
-  const { user, logout, hasRole, getAccessToken, configureMFA, resetPassword } = useAuth()
+  const { user, logout, hasRole, getAccessToken, configureMFA, changePassword } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -171,17 +171,6 @@ export default function PersonalSecuritySettings() {
                 >
                   MFAを設定・再設定
                 </button>
-
-                <button
-                  onClick={resetPassword}
-                  style={{
-                    padding: '10px 16px', borderRadius: t.radiusMd,
-                    background: t.surface, color: t.text,
-                    border: `1px solid ${t.border}`, cursor: 'pointer',
-                  }}
-                >
-                  パスワードを変更
-                </button>
               </div>
 
               <div style={{
@@ -190,6 +179,37 @@ export default function PersonalSecuritySettings() {
                 fontSize: '0.82rem', color: t.textMuted, lineHeight: 1.6,
               }}>
                 「MFAを設定・再設定」を押すとKeycloakのアカウント画面に遷移します。既存デバイスの削除後に再登録してください。
+              </div>
+            </div>
+
+            {/* パスワード変更セクション */}
+            <div style={{
+              background: t.surface, border: `1px solid ${t.border}`,
+              borderRadius: t.radiusLg, padding: '24px', boxShadow: t.shadowSm,
+              marginTop: '16px',
+            }}>
+              <h2 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 600, color: t.text }}>
+                パスワード
+              </h2>
+              <p style={{ margin: '0 0 16px', fontSize: '0.875rem', color: t.textMuted }}>
+                現在のパスワードを変更します。変更後は現在のセッションが維持されます。
+              </p>
+              <button
+                onClick={changePassword}
+                style={{
+                  padding: '10px 16px', borderRadius: t.radiusMd,
+                  background: t.primary, color: t.textInverse,
+                  border: 'none', cursor: 'pointer', fontWeight: 600,
+                }}
+              >
+                パスワードを変更する
+              </button>
+              <div style={{
+                marginTop: '18px', padding: '12px 16px',
+                background: '#f8fafc', borderRadius: t.radiusMd,
+                fontSize: '0.82rem', color: t.textMuted, lineHeight: 1.6,
+              }}>
+                現在のパスワードを知っている場合に使用します。パスワードを忘れた場合は、ログアウト後にログイン画面の「パスワードをお忘れの方」をご利用ください。
               </div>
             </div>
           )}

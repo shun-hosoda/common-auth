@@ -19,7 +19,8 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   register: () => void;
   resetPassword: () => void;
-  configureMFA: () => void;
+  changePassword: () => Promise<void>;
+  configureMFA: () => Promise<void>;
   handleCallback: () => Promise<void>;
 
   getAccessToken: () => string | null;

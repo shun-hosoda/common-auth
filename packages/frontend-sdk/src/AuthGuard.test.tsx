@@ -12,6 +12,7 @@ const createMockContext = (overrides: Partial<AuthContextValue> = {}): AuthConte
   logout: jest.fn(),
   register: jest.fn(),
   resetPassword: jest.fn(),
+  changePassword: jest.fn(),
   configureMFA: jest.fn(),
   getAccessToken: jest.fn(),
   handleCallback: jest.fn(),

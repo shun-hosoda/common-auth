@@ -46,9 +46,15 @@
     │                 ├─ MFA方式選択（TOTP / Email OTP）
     │                 └─ [保存する] ──► 全ユーザーに適用
     │
-    └─ [UserDropdown]
-            ├─ アカウント設定 ──► Keycloak Account Console /account/
-            └─ ログアウト ──────► Keycloak ログアウト ──► / (Home)
+    ├─ [UserDropdown]
+    │       ├─ 個人セキュリティ設定 ──► /me/security
+    │       └─ ログアウト ──────────► Keycloak ログアウト ──► / (Home)
+    │
+    └─ [/me/security] 個人セキュリティ設定 (全認証済みユーザー)
+            ├─ [MFA を設定・再設定] ──► Keycloak kc_action=CONFIGURE_TOTP ──► /callback ──► /me/security
+            └─ [パスワードを変更する] ──► Keycloak kc_action=UPDATE_PASSWORD ──► /callback ──► /dashboard
+                    ※ 認証済みセッションで UPDATE_PASSWORD アクションを実行
+                    ※ パスワードを忘れた場合（未認証）は別フロー: ログイン画面 →「パスワードを忘れた場合」→ Keycloak メールリンク
 ```
 
 ## 画面一覧
@@ -62,7 +68,7 @@
 | `/security` | セキュリティ設定 | `tenant_admin` / `super_admin` | [../design/auth/mfa/tenant-policy.md](../design/auth/mfa/tenant-policy.md) |
 | (Keycloak) | TOTP初回設定 | MFA有効テナントのユーザー | [../design/auth/mfa/login-flow.md](../design/auth/mfa/login-flow.md) |
 | (Keycloak) | MFAコード入力 | MFA有効テナントのユーザー | [../design/auth/mfa/login-flow.md](../design/auth/mfa/login-flow.md) |
-| (Keycloak) | Account Console | 認証済み | [../design/auth/mfa/account-settings.md](../design/auth/mfa/account-settings.md) |
+| `/me/security` | 個人セキュリティ設定 | 認証済み | — |
 
 ## 認可マトリックス
 
@@ -70,6 +76,7 @@
 |---|:---:|:---:|:---:|
 | ダッシュボード表示 | ✅ | ✅ | ✅ |
 | MFAステータスカード表示 | ✅ | ✅ | ✅ |
+| 個人セキュリティ設定（パスワード変更・MFA変更） | ✅ | ✅ | ✅ |
 | アカウント設定（自分のMFA管理） | ✅ | ✅ | ✅ |
 | ユーザー管理メニュー表示 | — | ✅ | ✅ |
 | セキュリティ設定メニュー表示 | — | ✅ | ✅ |
