@@ -50,8 +50,8 @@ class AuthConfig(BaseSettings):
 
     # SMTP / Email (for invitation mails)
     smtp_host: str = Field(
-        default="localhost",
-        description="SMTP server host"
+        default="127.0.0.1",
+        description="SMTP server host (use 127.0.0.1 on Windows to avoid IPv6 timeout)"
     )
     smtp_port: int = Field(
         default=1025,
@@ -76,7 +76,7 @@ class AuthConfig(BaseSettings):
 
     # User invitation settings
     invitation_base_url: str = Field(
-        default="http://localhost:5173",
+        default="http://127.0.0.1:3000",
         description="Base URL for invitation accept links (e.g. https://app.example.com)"
     )
     invitation_expires_hours: int = Field(

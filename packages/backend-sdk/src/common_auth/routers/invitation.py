@@ -24,6 +24,7 @@ Design references:
 """
 
 import logging
+import os
 import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Any, Literal
@@ -48,7 +49,6 @@ router = APIRouter()
 
 def _get_kc_admin(request: Request) -> KeycloakAdminClient:
     """Return cached KeycloakAdminClient (mirrors admin.py pattern)."""
-    import os
     if not hasattr(request.app.state, "kc_admin_client"):
         config = request.app.state.auth_config
         client_id = os.environ.get("KC_ADMIN_CLIENT_ID", "admin-api-client")
@@ -219,12 +219,16 @@ async def create_invitations(
     tenant_uuid = tenant_row["id"]
     tenant_name = tenant_row["display_name"]
 
-    # Look up inviter's display name for the email body
+    # Look up inviter's display name for the email body.
+    # invited_by is NULL when the admin hasn't synced to user_profiles yet
+    # (ENABLE_USER_SYNC=false or first login). FK on invited_by is ON DELETE SET NULL.
     inviter_row = await pool.fetchrow(
         "SELECT display_name FROM user_profiles WHERE id = $1",
         UUID(user.sub),
     )
     inviter_name = (inviter_row["display_name"] if inviter_row else None) or user.email
+    # Use NULL for invited_by if the admin is not yet in user_profiles (FK guard)
+    inviter_uuid: UUID | None = UUID(user.sub) if inviter_row is not None else None
 
     expires_at = datetime.now(timezone.utc) + timedelta(hours=body.expires_hours)
 
@@ -245,7 +249,12 @@ async def create_invitations(
             continue
 
         # M-5: Check if user already exists in this tenant (Keycloak)
-        kc_users = await kc.find_users_by_email(email)
+        try:
+            kc_users = await kc.find_users_by_email(email)
+        except Exception as kc_exc:
+            logger.error("KC admin lookup failed for %s: %s", email, kc_exc)
+            failed.append({"email": email, "reason": "kc_error"})
+            continue
         already_member = any(
             user.tenant_id in (u.get("attributes") or {}).get("tenant_id", [])
             for u in kc_users
@@ -271,7 +280,7 @@ async def create_invitations(
                                   expires_at, accepted_at, revoked_at, created_at
                         """,
                         tenant_uuid, email, token, item.role,
-                        item.group_id, UUID(user.sub),
+                        item.group_id, inviter_uuid,
                         body.custom_message, expires_at,
                     )
                     # Send email inside transaction — auto-rollback on SMTP failure (S-1)
@@ -288,8 +297,8 @@ async def create_invitations(
             failed.append({"email": email, "reason": "pending_exists"})
             continue
         except Exception as exc:
-            logger.error("Failed invitation for %s: %s", email, exc)
-            failed.append({"email": email, "reason": "smtp_error"})
+            logger.error("Failed invitation for %s: %s", email, exc, exc_info=True)
+            failed.append({"email": email, "reason": "invitation_error"})
             continue
 
         row_dict = _row_to_dict(inv_row)
@@ -332,6 +341,12 @@ async def revoke_invitation(
             detail=f"Cannot revoke invitation with status '{eff}'",
         )
 
+    # revoked_by: NULL when admin is not in user_profiles (FK guard)
+    revoker_exists = await pool.fetchval(
+        "SELECT 1 FROM user_profiles WHERE id = $1", UUID(user.sub)
+    )
+    revoker_uuid: UUID | None = UUID(user.sub) if revoker_exists else None
+
     updated = await pool.fetchrow(
         """
         UPDATE invitation_tokens
@@ -340,7 +355,7 @@ async def revoke_invitation(
         RETURNING id, tenant_id, email, role, group_id, status,
                   expires_at, accepted_at, revoked_at, created_at
         """,
-        UUID(user.sub), invitation_id,
+        revoker_uuid, invitation_id,
     )
     result = _row_to_dict(updated)
     result["invited_by"] = None
@@ -390,18 +405,21 @@ async def resend_invitation(
         "SELECT display_name FROM user_profiles WHERE id = $1", UUID(user.sub)
     )
     inviter_name = (inviter_row["display_name"] if inviter_row else None) or user.email
+    # Use NULL for revoked_by / invited_by if admin not in user_profiles (FK guard)
+    inviter_uuid: UUID | None = UUID(user.sub) if inviter_row is not None else None
 
     config_obj = request.app.state.auth_config
     expires_hours = getattr(config_obj, "invitation_expires_hours", 72)
     new_expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
     new_token = secrets.token_urlsafe(32)
 
-    # S-4: revoke old → insert new (uq_invitation_pending allows this order)
+    # S-4: revoke old → insert new → send email, all inside single transaction (S-1 pattern).
+    # SMTP failure rolls back the DB writes — no orphaned/ghost invitation rows.
     async with pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute(
                 "UPDATE invitation_tokens SET status='revoked', revoked_at=NOW(), revoked_by=$1 WHERE id=$2",
-                UUID(user.sub), invitation_id,
+                inviter_uuid, invitation_id,
             )
             new_row = await conn.fetchrow(
                 """
@@ -413,19 +431,18 @@ async def resend_invitation(
                           expires_at, accepted_at, revoked_at, created_at
                 """,
                 tenant_uuid, old_row["email"], new_token, old_row["role"],
-                old_row["group_id"], UUID(user.sub),
+                old_row["group_id"], inviter_uuid,
                 old_row["custom_message"], new_expires_at,
             )
-
-    # Send new email
-    await email_svc.send_invitation(
-        to_email=old_row["email"],
-        token=new_token,
-        invited_by_name=inviter_name,
-        tenant_name=tenant_name,
-        base_url=config.invitation_base_url,
-        custom_message=old_row["custom_message"],
-    )
+            # Send email inside transaction — SMTP failure auto-rolls back DB (S-1)
+            await email_svc.send_invitation(
+                to_email=old_row["email"],
+                token=new_token,
+                invited_by_name=inviter_name,
+                tenant_name=tenant_name,
+                base_url=config.invitation_base_url,
+                custom_message=old_row["custom_message"],
+            )
 
     result = _row_to_dict(new_row)
     result["invited_by"] = inviter_name

@@ -15,15 +15,16 @@ export default defineConfig({
     ],
   },
   server: {
+    host: '127.0.0.1',
     port: 3000,
     strictPort: true, // 3000が使用中なら即エラー（サイレントフォールバック防止）
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

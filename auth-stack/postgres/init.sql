@@ -229,7 +229,7 @@ CREATE TABLE IF NOT EXISTS invitation_tokens (
     invited_by      UUID            REFERENCES user_profiles(id) ON DELETE SET NULL,
     custom_message  TEXT,
     status          VARCHAR(20)     NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+                        CHECK (status IN ('pending', 'accepted', 'revoked')),
     expires_at      TIMESTAMPTZ     NOT NULL,
     accepted_at     TIMESTAMPTZ,
     revoked_at      TIMESTAMPTZ,
@@ -247,8 +247,8 @@ CREATE INDEX IF NOT EXISTS idx_invitation_tokens_tenant_id ON invitation_tokens(
 CREATE INDEX IF NOT EXISTS idx_invitation_tokens_email ON invitation_tokens(email);
 
 ALTER TABLE invitation_tokens ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON invitation_tokens;
-CREATE POLICY tenant_isolation ON invitation_tokens
+DROP POLICY IF EXISTS tenant_isolation_policy ON invitation_tokens;
+CREATE POLICY tenant_isolation_policy ON invitation_tokens
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
 
 -- システム共通権限プリセット
@@ -676,7 +676,7 @@ DO $$
 BEGIN
     RAISE NOTICE 'Application database initialized successfully';
     RAISE NOTICE 'Tenants: common-auth / acme-corp / globex-inc';
-    RAISE NOTICE 'Tables: tenants, user_profiles, tenant_groups, user_group_memberships, permissions, group_permissions, user_permissions';
+    RAISE NOTICE 'Tables: tenants, user_profiles, tenant_groups, user_group_memberships, permissions, group_permissions, user_permissions, invitation_tokens';
     RAISE NOTICE 'Groups: acme-corp/globex-inc × (管理部/開発チーム/営業部/マーケティング部/カスタマーサポート)';
     RAISE NOTICE 'Test users: 200 (100 per tenant) with varied group patterns + direct permission overrides';
     RAISE NOTICE 'Row-Level Security enabled on all tables';

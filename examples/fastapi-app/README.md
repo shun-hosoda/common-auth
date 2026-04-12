@@ -1,179 +1,154 @@
-# Common Auth Example Application - FastAPI
+# FastAPI Example App（common-auth SDK）
 
-common-auth SDKの使用例を示すFastAPIアプリケーション。
+common-auth SDKの使用例を示すFastAPIアプリケーション。  
+**URL**: http://127.0.0.1:8000 / **Swagger UI**: http://127.0.0.1:8000/docs
 
-## 前提条件
+---
 
-1. **Auth Stack（Keycloak）の起動**:
-   ```bash
-   cd ../../auth-stack
-   cp .env.example .env
-   docker-compose up -d
-   ```
+## 起動手順（初回）
 
-2. **Keycloakの起動完了を待つ**（1-2分）:
-   ```bash
-   curl http://localhost:8080
-   ```
+### Step 1 — Auth Stack を起動（Keycloak・DB）
 
-## セットアップ
-
-### 1. 仮想環境の作成
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+```powershell
+cd auth-stack
+copy .env.example .env   # 初回のみ
+docker-compose up -d
 ```
 
-### 2. 依存関係のインストール
+> Keycloak の起動確認: ブラウザで http://127.0.0.1:8080 が開けばOK（1〜2分かかります）
+> ※ Windows では `localhost` が IPv6 に解決されタイムアウトする場合があります。`127.0.0.1` を使ってください。
 
-```bash
-pip install -r requirements.txt
+### Step 2 — 環境変数ファイルを作成
+
+```powershell
+cd examples/fastapi-app
+copy .env.example .env   # 初回のみ
 ```
 
-### 3. 環境変数の設定
+> デフォルト設定のままでローカル Auth Stack に接続できます。変更不要。
 
-```bash
-cp .env.example .env
+### Step 3 — SDK をインストール
+
+```powershell
+pip install -e ../../packages/backend-sdk
 ```
 
-必要に応じて `.env` を編集してください（デフォルトでローカルAuth Stackで動作します）。
+### Step 4 — 起動
 
-**重要**: このFastAPI Appは`backend-app`（Confidential Client）を使用します。
-- **フロントエンドアプリ**（React App）は`example-app`（Public Client）を使用
-- **バックエンドアプリ**（FastAPI App）は`backend-app`（Confidential Client）を使用
-
-## 実行
-
-```bash
-python main.py
-```
-
-またはuvicornで：
-```bash
+```powershell
 uvicorn main:app --reload
 ```
 
-アプリケーションは http://localhost:8000 で起動します。
+http://127.0.0.1:8000 で起動します。
+
+---
+
+## 2回目以降の起動
+
+```powershell
+# Auth Stack が止まっている場合のみ
+cd auth-stack
+docker-compose up -d
+
+# FastAPI 起動
+cd examples/fastapi-app
+uvicorn main:app --reload
+```
+
+---
 
 ## API エンドポイント
 
-### 公開エンドポイント
+| メソッド | パス | 権限 | 説明 |
+|---------|------|------|------|
+| GET | `/` | 不要 | ヘルスチェック |
+| GET | `/docs` | 不要 | Swagger UI |
+| GET | `/auth/health` | 不要 | Keycloak 接続確認 |
+| GET | `/api/me` | JWT必須 | 自分のユーザー情報 |
+| GET | `/api/protected` | JWT必須 | 認証確認用 |
+| GET | `/api/admin` | admin role | 管理者専用 |
+| GET | `/api/admin/users` | tenant_admin role | ユーザー一覧 |
 
-- `GET /`: ヘルスチェック
-- `GET /docs`: Swagger UI（APIドキュメント）
+---
 
-### 保護されたエンドポイント（JWT必須）
+## 動作確認（テスト用トークンの取得）
 
-- `GET /api/me`: 現在のユーザー情報を取得
-- `GET /api/protected`: 保護されたエンドポイント（認証必須）
-- `GET /api/admin`: 管理者専用エンドポイント（admin role必須）
+### PowerShell
 
-## 認証テスト
+```powershell
+$res = Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8080/realms/common-auth/protocol/openid-connect/token" `
+  -Body @{
+    grant_type = "password"
+    client_id  = "example-app"
+    username   = "testuser_acme-corp@example.com"
+    password   = "password123"
+  }
+$TOKEN = $res.access_token
 
-### 1. アクセストークンの取得
-
-**方法1**: React Appでログイン後、トークンをコピー
-- http://localhost:3000 にアクセス
-- ログイン: `testuser@example.com` / `password123`
-- ダッシュボードでトークンをコピー
-
-**方法2**: curlで直接取得（Direct Access Grants）
-```bash
-curl -X POST http://localhost:8080/realms/common-auth/protocol/openid-connect/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password" \
-  -d "client_id=backend-app" \
-  -d "username=testuser@example.com" \
-  -d "password=password123"
+# API呼び出し
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/me" `
+  -Headers @{ Authorization = "Bearer $TOKEN" }
 ```
 
-### 2. APIを呼び出す
-
-```bash
-# トークンを環境変数に設定
-export TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-# ユーザー情報を取得
-curl http://localhost:8000/api/me \
-  -H "Authorization: Bearer $TOKEN"
-
-# 保護されたエンドポイントにアクセス
-curl http://localhost:8000/api/protected \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## マルチテナント対応（オプション）
-
-### データベース接続
-
-`DATABASE_URL`を設定してマルチテナント機能を有効化：
+### curl（bash / WSL）
 
 ```bash
-# .env
-DATABASE_URL=postgresql+asyncpg://app_user:app_pass@localhost:5433/app_db
+TOKEN=$(curl -s -X POST http://127.0.0.1:8080/realms/common-auth/protocol/openid-connect/token \
+  -d "grant_type=password&client_id=example-app&username=testuser_acme-corp%40example.com&password=password123" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl http://127.0.0.1:8000/api/me -H "Authorization: Bearer $TOKEN"
 ```
 
-### テナント分離
-
-Row-Level Security（RLS）により、各テナントのデータが自動的に分離されます：
-
-```python
-from common_auth import get_db_session, AuthUser
-from fastapi import Depends
-from sqlalchemy.orm import Session
-
-@app.get("/api/users")
-async def get_users(
-    user: AuthUser = Depends(get_current_user),
-    db: Session = Depends(get_db_session)
-):
-    # user.tenant_id が自動的にセットされ、RLS が適用される
-    users = db.query(UserProfile).all()  # 自分のテナントのデータのみ
-    return users
-```
-
-## レート制限
-
-Phase 2機能: リクエストレート制限がミドルウェアレベルで適用されます。
-
-```bash
-# .env
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_DEFAULT_REQUESTS=60    # 1分あたり
-RATE_LIMIT_LOGIN_REQUESTS=5       # 1分あたり（ログインエンドポイント）
-```
+---
 
 ## トラブルシューティング
 
-### "Unable to get JWKS" エラー
+### 「ModuleNotFoundError」が出る
 
-Keycloakが起動していることを確認：
-```bash
-curl http://localhost:8080
+```powershell
+pip install -e ../../packages/backend-sdk
 ```
 
-### "Invalid token" エラー
+### 「Unable to get JWKS」エラー
 
-1. トークンの有効期限を確認（デフォルト: 5分）
-2. `KEYCLOAK_URL`と`KEYCLOAK_REALM`が正しいか確認
-3. トークンが正しいRealmから発行されているか確認
+Keycloak が起動していない、または `localhost` が IPv6 に解決されている。
 
-### データベース接続エラー
+```powershell
+# 起動確認（127.0.0.1 を使うこと）
+Invoke-WebRequest http://127.0.0.1:8080 -UseBasicParsing | Select-Object StatusCode
 
-Auth Stackの`app-db`が起動していることを確認：
-```bash
-docker ps | grep app-db
+# 起動していない場合
+cd auth-stack
+docker-compose up -d
 ```
 
-## プロダクション対応
+> **Windows の注意**: ブラウザや curl で `localhost:8080` がタイムアウトする場合は `127.0.0.1:8080` を使ってください。
 
-このExample Appは**開発/テスト用**です。本番環境では：
+### 「App DB connection failed」警告
 
-1. **環境変数の管理**: AWS Secrets Manager、HashiCorp Vaultなどを使用
-2. **HTTPS**: リバースプロキシ（Nginx、Traefik）でHTTPSを終端
-3. **レート制限**: Redisバックエンドでスケール可能なレート制限を実装
-4. **ロギング**: 構造化ログ（JSON）とログ集約（ELK、Datadog）
-5. **モニタリング**: Prometheus、Grafanaでメトリクス収集
+app-db コンテナの状態を確認:
 
-詳細は `docs/` のプロダクションデプロイガイドを参照してください。
+```powershell
+docker ps --filter name=app-db
+```
+
+> この警告はユーザーグループ機能が無効になるだけで、それ以外の API は正常に動作します。
+
+### 「Invalid token」エラー
+
+- トークンの有効期限切れ（デフォルト: 5分）→ 再取得してください
+- `KEYCLOAK_CLIENT_ID` が `.env` で `example-app` になっていることを確認
+
+---
+
+## 環境変数（.env）の主要項目
+
+| 変数 | デフォルト値 | 説明 |
+|------|------------|------|
+| `KEYCLOAK_URL` | `http://127.0.0.1:8080` | Keycloak の URL（Windows は `localhost` 非推奨） |
+| `KEYCLOAK_REALM` | `common-auth` | Realm 名 |
+| `KEYCLOAK_CLIENT_ID` | `example-app` | クライアント ID |
+| `KC_ADMIN_CLIENT_SECRET` | `admin-api-client-secret` | 管理API用シークレット |
+| `APP_DATABASE_URL` | （未設定） | asyncpg 接続先（ユーザーグループ機能用） |

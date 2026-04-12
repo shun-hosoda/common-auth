@@ -1,11 +1,13 @@
 """Example FastAPI application using common-auth."""
 
 # ── Load .env BEFORE any imports that read os.environ ─────────────────────────
+from pathlib import Path  # noqa: E402  isort:skip
 from dotenv import load_dotenv  # noqa: E402  isort:skip
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 # ──────────────────────────────────────────────────────────────────────────────
 
 import logging
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
@@ -32,11 +34,40 @@ async def lifespan(app: FastAPI):
     # ── App DB connection pool (optional) ──
     db_url = os.environ.get("APP_DATABASE_URL")
     if db_url:
-        try:
-            app.state.db_pool = await asyncpg.create_pool(db_url, min_size=2, max_size=10)
+        connect_kwargs: dict = {}
+        # Windows + Docker Desktop での瞬断対策: ローカルPostgresは SSL を明示的に無効化
+        if "localhost" in db_url or "127.0.0.1" in db_url:
+            connect_kwargs["ssl"] = False
+
+        pool: asyncpg.Pool | None = None
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                pool = await asyncpg.create_pool(
+                    db_url,
+                    min_size=2,
+                    max_size=10,
+                    **connect_kwargs,
+                )
+                break
+            except Exception as e:
+                last_error = e
+                if attempt < 3:
+                    logger.warning(
+                        "App DB connect attempt %s/3 failed: %s (retrying)",
+                        attempt,
+                        e,
+                    )
+                    await asyncio.sleep(1.5 * attempt)
+
+        if pool is not None:
+            app.state.db_pool = pool
             logger.info(f"App DB pool created: {db_url.split('@')[-1]}")
-        except Exception as e:
-            logger.warning(f"App DB connection failed (user-groups endpoint disabled): {e}")
+        else:
+            logger.warning(
+                "App DB connection failed after retries (user-groups endpoint disabled): %s",
+                last_error,
+            )
             app.state.db_pool = None
     else:
         app.state.db_pool = None
