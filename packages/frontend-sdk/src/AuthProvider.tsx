@@ -146,16 +146,17 @@ export function AuthProvider({
   // パスワードを忘れた場合（resetPassword）とは別フロー。
   // oidc-client-ts の signinRedirect を経由することで state が保持され、
   // Callback ページが正常にセッションを復元できる。
-  const changePassword = useCallback(async () => {
+  const changePassword = useCallback(async (options?: { returnTo?: string }) => {
     if (!user) {
       throw new Error("User must be authenticated to change password");
     }
     await userManager.signinRedirect({
       extraQueryParams: { kc_action: 'UPDATE_PASSWORD' },
+      state: options?.returnTo ? { returnTo: options.returnTo } : undefined,
     });
   }, [userManager, user]);
 
-  const configureMFA = useCallback(async () => {
+  const configureMFA = useCallback(async (options?: { returnTo?: string }) => {
     if (!user) {
       throw new Error("User must be authenticated to configure MFA");
     }
@@ -163,8 +164,10 @@ export function AuthProvider({
     // これにより oidc-client-ts が state を sessionStorage に保存し、
     // Keycloak からのリダイレクトバック時に Callback ページが正常に処理できる。
     // 手動で URL を組み立てると state が保存されず Callback で失敗する。
+    // state に returnTo を含めることで、Callback 後に元ページへ復帰できる。
     await userManager.signinRedirect({
       extraQueryParams: { kc_action: 'CONFIGURE_TOTP' },
+      state: options?.returnTo ? { returnTo: options.returnTo } : undefined,
     });
   }, [userManager, user]);
 
@@ -180,11 +183,15 @@ export function AuthProvider({
     [user]
   );
 
-  const handleCallback = useCallback(async () => {
+  const handleCallback = useCallback(async (): Promise<{ returnTo?: string } | undefined> => {
     try {
       setError(null);
       const callbackUser = await userManager.signinRedirectCallback();
       setUser(callbackUser);
+      // signinRedirect 時に state: { returnTo } を渡した場合、
+      // callbackUser.state に格納されて返ってくる。
+      const userState = callbackUser.state as { returnTo?: string } | undefined;
+      return userState ?? undefined;
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Callback processing failed"));
       throw err;

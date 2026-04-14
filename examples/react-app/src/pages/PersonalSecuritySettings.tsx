@@ -22,6 +22,7 @@ export default function PersonalSecuritySettings() {
   const [status, setStatus] = useState<MfaStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mfaLoading, setMfaLoading] = useState(false)
 
   // Password change modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -216,16 +217,35 @@ export default function PersonalSecuritySettings() {
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                <button
-                  onClick={configureMFA}
-                  style={{
+                {status?.mfa_enabled ? (
+                  <button
+                    onClick={async () => {
+                      try {
+                        setMfaLoading(true)
+                        await configureMFA({ returnTo: '/me/security' })
+                      } catch (e) {
+                        setMfaLoading(false)
+                        setError(e instanceof Error ? e.message : 'MFA設定の開始に失敗しました')
+                      }
+                    }}
+                    disabled={mfaLoading}
+                    style={{
+                      padding: '10px 16px', borderRadius: t.radiusMd,
+                      background: mfaLoading ? t.textMuted : t.primary, color: t.textInverse,
+                      border: 'none', cursor: mfaLoading ? 'not-allowed' : 'pointer', fontWeight: 600,
+                    }}
+                  >
+                    {mfaLoading ? '遷移中...' : (status.mfa_configured ? 'MFAを再設定する' : 'MFAを設定する')}
+                  </button>
+                ) : (
+                  <div style={{
                     padding: '10px 16px', borderRadius: t.radiusMd,
-                    background: t.primary, color: t.textInverse,
-                    border: 'none', cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  MFAを設定・再設定
-                </button>
+                    background: '#f1f5f9', color: t.textMuted,
+                    fontSize: '0.875rem',
+                  }}>
+                    MFAはテナント管理者によって有効化されていません
+                  </div>
+                )}
               </div>
 
               <div style={{
@@ -233,7 +253,9 @@ export default function PersonalSecuritySettings() {
                 background: '#f8fafc', borderRadius: t.radiusMd,
                 fontSize: '0.82rem', color: t.textMuted, lineHeight: 1.6,
               }}>
-                「MFAを設定・再設定」を押すとKeycloakのアカウント画面に遷移します。既存デバイスの削除後に再登録してください。
+                {status?.mfa_enabled
+                  ? '「MFAを設定する」を押すとKeycloakの認証画面に遷移し、TOTP（認証アプリ）の設定を行えます。設定完了後、この画面に自動的に戻ります。'
+                  : 'MFAを利用するには、テナント管理者がセキュリティ設定画面からMFAを有効化する必要があります。'}
               </div>
             </div>
 

@@ -14,8 +14,11 @@ export default function Callback() {
 
     const processCallback = async () => {
       try {
-        await handleCallback()
-        navigate('/dashboard', { replace: true })
+        const state = await handleCallback()
+        // configureMFA / changePassword が state: { returnTo } を渡している場合、
+        // アクション完了後にその元ページへ復帰する。
+        const returnTo = (state as { returnTo?: string } | undefined)?.returnTo
+        navigate(returnTo || '/dashboard', { replace: true })
       } catch (err) {
         console.error('Callback error:', err)
         setError(err instanceof Error ? err.message : 'Authentication failed')

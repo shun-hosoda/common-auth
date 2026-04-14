@@ -19,9 +19,9 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   register: () => void;
   resetPassword: () => void;
-  changePassword: () => Promise<void>;
-  configureMFA: () => Promise<void>;
-  handleCallback: () => Promise<void>;
+  changePassword: (options?: { returnTo?: string }) => Promise<void>;
+  configureMFA: (options?: { returnTo?: string }) => Promise<void>;
+  handleCallback: () => Promise<{ returnTo?: string } | undefined>;
 
   getAccessToken: () => string | null;
   hasRole: (role: string) => boolean;
