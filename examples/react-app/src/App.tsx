@@ -87,7 +87,7 @@ function App() {
         </AuthGuard>
       } />
       {/* MFA setup redirect page — opened in a new tab */}
-      <Route path="/auth/mfa-setup" element={
+      <Route path="/me/mfa-setup" element={
         <AuthGuard fallback={<div className="loading">Loading...</div>}>
           <MfaSetupRedirect />
         </AuthGuard>

@@ -275,7 +275,7 @@ export default function PersonalSecuritySettings() {
                     onClick={() => {
                       setMfaCompleted(false)
                       // 別タブで MFA 設定フローを開始する
-                      window.open('/auth/mfa-setup', '_blank')
+                      window.open('/me/mfa-setup', '_blank')
                       // 別タブが開いている間はボタンを disabled にする
                       // BroadcastChannel の完了通知を受け取ったら解除される
                       setMfaLoading(true)

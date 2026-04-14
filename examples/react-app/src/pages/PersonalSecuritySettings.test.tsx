@@ -167,7 +167,7 @@ describe('PersonalSecuritySettings', () => {
   })
 
   describe('MFA button interaction', () => {
-    it('opens /auth/mfa-setup in new tab when "MFAを設定する" is clicked', async () => {
+    it('opens /me/mfa-setup in new tab when "MFAを設定する" is clicked', async () => {
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
       mockGetMfaStatus.mockResolvedValue({
         mfa_enabled: true,
@@ -183,7 +183,7 @@ describe('PersonalSecuritySettings', () => {
 
       fireEvent.click(screen.getByText('MFAを設定する'))
 
-      expect(openSpy).toHaveBeenCalledWith('/auth/mfa-setup', '_blank')
+      expect(openSpy).toHaveBeenCalledWith('/me/mfa-setup', '_blank')
       // クリック後はボタンが disabled（別タブ使用中）になる
       await waitFor(() => {
         expect(screen.getByText('別タブで設定中...')).toBeInTheDocument()
@@ -191,7 +191,7 @@ describe('PersonalSecuritySettings', () => {
       openSpy.mockRestore()
     })
 
-    it('opens /auth/mfa-setup in new tab when "MFAを再設定する" is clicked', async () => {
+    it('opens /me/mfa-setup in new tab when "MFAを再設定する" is clicked', async () => {
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
       mockGetMfaStatus.mockResolvedValue({
         mfa_enabled: true,
@@ -207,7 +207,7 @@ describe('PersonalSecuritySettings', () => {
 
       fireEvent.click(screen.getByText('MFAを再設定する'))
 
-      expect(openSpy).toHaveBeenCalledWith('/auth/mfa-setup', '_blank')
+      expect(openSpy).toHaveBeenCalledWith('/me/mfa-setup', '_blank')
       openSpy.mockRestore()
     })
 

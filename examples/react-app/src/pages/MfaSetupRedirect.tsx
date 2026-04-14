@@ -5,7 +5,7 @@ import { t } from '../theme/tokens'
 /**
  * 別タブで開かれる MFA 設定開始ページ。
  *
- * PersonalSecuritySettings が window.open('/auth/mfa-setup', '_blank') で
+ * PersonalSecuritySettings が window.open('/me/mfa-setup', '_blank') で
  * このページを別タブで起動する。
  * ページが表示されたら自動的に configureMFA を呼び出し、
  * Keycloak の CONFIGURE_TOTP アクション画面へリダイレクトする。
