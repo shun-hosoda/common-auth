@@ -6,7 +6,9 @@
     "predev": "cd ../../packages/frontend-sdk && npm run build && cd ../../examples/react-app && rimraf node_modules/.vite",
     "dev": "vite --force",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@common-auth/react": "file:../../packages/frontend-sdk",
@@ -16,11 +18,17 @@
     "react-router-dom": "^6.22.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "happy-dom": "^20.9.0",
+    "jsdom": "^27.0.1",
     "rimraf": "^6.1.3",
     "typescript": "^5.4.0",
-    "vite": "^5.1.0"
+    "vite": "^5.1.0",
+    "vitest": "^4.1.4"
   }
 }
