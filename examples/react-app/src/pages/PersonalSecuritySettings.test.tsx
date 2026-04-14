@@ -167,8 +167,8 @@ describe('PersonalSecuritySettings', () => {
   })
 
   describe('MFA button interaction', () => {
-    it('calls configureMFA with returnTo=/me/security on click', async () => {
-      mockConfigureMFA.mockResolvedValue(undefined)
+    it('opens /auth/mfa-setup in new tab when "MFAを設定する" is clicked', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
       mockGetMfaStatus.mockResolvedValue({
         mfa_enabled: true,
         mfa_method: 'totp',
@@ -183,35 +183,16 @@ describe('PersonalSecuritySettings', () => {
 
       fireEvent.click(screen.getByText('MFAを設定する'))
 
+      expect(openSpy).toHaveBeenCalledWith('/auth/mfa-setup', '_blank')
+      // クリック後はボタンが disabled（別タブ使用中）になる
       await waitFor(() => {
-        expect(mockConfigureMFA).toHaveBeenCalledWith({ returnTo: '/me/security' })
+        expect(screen.getByText('別タブで設定中...')).toBeInTheDocument()
       })
+      openSpy.mockRestore()
     })
 
-    it('shows loading state while MFA configure is in progress', async () => {
-      // Never resolves to keep loading state
-      mockConfigureMFA.mockReturnValue(new Promise(() => {}))
-      mockGetMfaStatus.mockResolvedValue({
-        mfa_enabled: true,
-        mfa_method: 'totp',
-        mfa_configured: false,
-      })
-
-      renderPage()
-
-      await waitFor(() => {
-        expect(screen.getByText('MFAを設定する')).toBeInTheDocument()
-      })
-
-      fireEvent.click(screen.getByText('MFAを設定する'))
-
-      await waitFor(() => {
-        expect(screen.getByText('遷移中...')).toBeInTheDocument()
-      })
-    })
-
-    it('shows error when configureMFA fails', async () => {
-      mockConfigureMFA.mockRejectedValue(new Error('Redirect failed'))
+    it('opens /auth/mfa-setup in new tab when "MFAを再設定する" is clicked', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
       mockGetMfaStatus.mockResolvedValue({
         mfa_enabled: true,
         mfa_method: 'totp',
@@ -226,11 +207,59 @@ describe('PersonalSecuritySettings', () => {
 
       fireEvent.click(screen.getByText('MFAを再設定する'))
 
-      await waitFor(() => {
-        expect(screen.getByText(/Redirect failed/)).toBeInTheDocument()
-      })
+      expect(openSpy).toHaveBeenCalledWith('/auth/mfa-setup', '_blank')
+      openSpy.mockRestore()
     })
-  })
+
+    it('shows completion banner and re-enables button after BroadcastChannel notifies mfa-configured', async () => {
+      vi.spyOn(window, 'open').mockReturnValue(null)
+
+      // happy-dom supports BroadcastChannel; capture the instance created by the component
+      let capturedBc: BroadcastChannel | null = null
+      const OrigBC = globalThis.BroadcastChannel
+      globalThis.BroadcastChannel = class extends OrigBC {
+        constructor(name: string) {
+          super(name)
+          if (name === 'mfa-configured') capturedBc = this
+        }
+      }
+
+      mockGetMfaStatus.mockResolvedValue({
+        mfa_enabled: true,
+        mfa_method: 'totp',
+        mfa_configured: false,
+      })
+
+      renderPage()
+
+      // MFA status の読み込み完了を待機
+      await waitFor(() => {
+        expect(screen.getByText('MFAを設定する')).toBeInTheDocument()
+      })
+
+      // Click to open the new tab — button should disable
+      fireEvent.click(screen.getByText('MFAを設定する'))
+      await waitFor(() => {
+        expect(screen.getByText('別タブで設定中...')).toBeInTheDocument()
+      })
+
+      // Simulate BroadcastChannel message from the MFA setup tab
+      await waitFor(() => { expect(capturedBc).not.toBeNull() })
+      // onmessage を直接呼び出してメッセージ受信をシミュレート
+      const fakeEvent = { data: { type: 'completed' } } as MessageEvent
+      ;(capturedBc as unknown as { onmessage: ((e: MessageEvent) => void) | null }).onmessage?.(fakeEvent)
+
+      // 完了バナー表示 + ボタン復活
+      await waitFor(() => {
+        expect(screen.getByText('MFA設定が完了しました')).toBeInTheDocument()
+      })
+      await waitFor(() => {
+        expect(screen.getByText('MFAを設定する')).toBeInTheDocument()
+      })
+
+      globalThis.BroadcastChannel = OrigBC
+    })
+  }) // describe MFA button interaction
 
   describe('loading state', () => {
     it('shows loading indicator while fetching MFA status', () => {

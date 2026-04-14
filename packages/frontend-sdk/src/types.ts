@@ -20,8 +20,8 @@ export interface AuthContextValue {
   register: () => void;
   resetPassword: () => void;
   changePassword: (options?: { returnTo?: string }) => Promise<void>;
-  configureMFA: (options?: { returnTo?: string }) => Promise<void>;
-  handleCallback: () => Promise<{ returnTo?: string } | undefined>;
+  configureMFA: (options?: { returnTo?: string; broadcastCompletion?: string }) => Promise<void>;
+  handleCallback: () => Promise<{ returnTo?: string; broadcastCompletion?: string } | undefined>;
 
   getAccessToken: () => string | null;
   hasRole: (role: string) => boolean;

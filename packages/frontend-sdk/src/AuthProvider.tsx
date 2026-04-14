@@ -156,7 +156,7 @@ export function AuthProvider({
     });
   }, [userManager, user]);
 
-  const configureMFA = useCallback(async (options?: { returnTo?: string }) => {
+  const configureMFA = useCallback(async (options?: { returnTo?: string; broadcastCompletion?: string }) => {
     if (!user) {
       throw new Error("User must be authenticated to configure MFA");
     }
@@ -164,10 +164,15 @@ export function AuthProvider({
     // これにより oidc-client-ts が state を sessionStorage に保存し、
     // Keycloak からのリダイレクトバック時に Callback ページが正常に処理できる。
     // 手動で URL を組み立てると state が保存されず Callback で失敗する。
-    // state に returnTo を含めることで、Callback 後に元ページへ復帰できる。
+    // state に returnTo / broadcastCompletion を含めることで
+    // Callback 後に元ページへ復帰 or BroadcastChannel で通知できる。
+    const stateData: { returnTo?: string; broadcastCompletion?: string } = {};
+    if (options?.returnTo) stateData.returnTo = options.returnTo;
+    if (options?.broadcastCompletion) stateData.broadcastCompletion = options.broadcastCompletion;
+    const hasState = Object.keys(stateData).length > 0;
     await userManager.signinRedirect({
       extraQueryParams: { kc_action: 'CONFIGURE_TOTP' },
-      state: options?.returnTo ? { returnTo: options.returnTo } : undefined,
+      state: hasState ? stateData : undefined,
     });
   }, [userManager, user]);
 
@@ -183,14 +188,14 @@ export function AuthProvider({
     [user]
   );
 
-  const handleCallback = useCallback(async (): Promise<{ returnTo?: string } | undefined> => {
+  const handleCallback = useCallback(async (): Promise<{ returnTo?: string; broadcastCompletion?: string } | undefined> => {
     try {
       setError(null);
       const callbackUser = await userManager.signinRedirectCallback();
       setUser(callbackUser);
-      // signinRedirect 時に state: { returnTo } を渡した場合、
+      // signinRedirect 時に state: { returnTo, broadcastCompletion } を渡した場合、
       // callbackUser.state に格納されて返ってくる。
-      const userState = callbackUser.state as { returnTo?: string } | undefined;
+      const userState = callbackUser.state as { returnTo?: string; broadcastCompletion?: string } | undefined;
       return userState ?? undefined;
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Callback processing failed"));
