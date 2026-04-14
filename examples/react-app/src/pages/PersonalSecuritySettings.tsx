@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
 import { type MfaStatus, getMfaStatus } from '../api/adminApi'
 import { t } from '../theme/tokens'
+import { ChangePasswordModal } from '../components/ChangePasswordModal'
 import {
   useIsMobile,
   UserDropdown,
@@ -13,7 +14,7 @@ import {
 } from '../components/layout'
 
 export default function PersonalSecuritySettings() {
-  const { user, logout, hasRole, getAccessToken, configureMFA, changePassword } = useAuth()
+  const { user, logout, hasRole, getAccessToken, configureMFA } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -21,6 +22,23 @@ export default function PersonalSecuritySettings() {
   const [status, setStatus] = useState<MfaStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Password change modal
+  const [modalOpen, setModalOpen] = useState(false)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 3000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
 
   const isSuperAdmin = hasRole('super_admin')
   const isTenantAdmin = hasRole('tenant_admin')
@@ -144,6 +162,42 @@ export default function PersonalSecuritySettings() {
             </div>
           )}
 
+          {/* Success toast */}
+          {toastMsg && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                position: 'fixed',
+                bottom: '24px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: t.success,
+                color: '#fff',
+                padding: '12px 24px',
+                borderRadius: t.radiusFull,
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                boxShadow: t.shadowMd,
+                zIndex: 2000,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ✅ {toastMsg}
+            </div>
+          )}
+
+          {/* Password change modal */}
+          <ChangePasswordModal
+            open={modalOpen}
+            token={getAccessToken() ?? ''}
+            onClose={() => setModalOpen(false)}
+            onSuccess={() => {
+              setModalOpen(false)
+              showToast('パスワードを変更しました')
+            }}
+          />
+
           {!loading && (
             <>
             <div style={{
@@ -196,7 +250,7 @@ export default function PersonalSecuritySettings() {
                 現在のパスワードを変更します。変更後は現在のセッションが維持されます。
               </p>
               <button
-                onClick={changePassword}
+                onClick={() => setModalOpen(true)}
                 style={{
                   padding: '10px 16px', borderRadius: t.radiusMd,
                   background: t.primary, color: t.textInverse,

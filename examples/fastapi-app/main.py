@@ -10,12 +10,15 @@ import logging
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+import httpx
+from fastapi import FastAPI, Depends, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 import asyncpg
 
 from common_auth import AuthConfig, setup_auth, get_current_user, get_optional_user, AuthUser
+from common_auth.services.keycloak_admin_client import KeycloakAdminClient
 
 # Configure logging
 logging.basicConfig(
@@ -72,6 +75,21 @@ async def lifespan(app: FastAPI):
     else:
         app.state.db_pool = None
         logger.info("APP_DATABASE_URL not set — user-groups endpoint disabled")
+
+    # ── Keycloak Admin Client (required for /auth/mfa-status etc.) ──
+    admin_client_id = os.environ.get("KC_ADMIN_CLIENT_ID", "admin-api-client")
+    admin_client_secret = os.environ.get("KC_ADMIN_CLIENT_SECRET", "")
+    if admin_client_secret:
+        auth_cfg = app.state.auth_config
+        app.state.kc_admin_client = KeycloakAdminClient(
+            keycloak_url=auth_cfg.keycloak_url,
+            realm=auth_cfg.keycloak_realm,
+            client_id=admin_client_id,
+            client_secret=admin_client_secret,
+        )
+        logger.info("Keycloak admin client initialized (client_id=%s)", admin_client_id)
+    else:
+        logger.warning("KC_ADMIN_CLIENT_SECRET not set — Admin API endpoints will return 503")
 
     yield
 
@@ -238,6 +256,102 @@ async def list_users_with_groups(user: AuthUser = Depends(get_current_user)):
         }
         for r in rows
     ]
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Change password endpoint (via Keycloak Admin API)
+# ────────────────────────────────────────────────────────────────────────────
+
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
+@app.put("/api/users/me/password")
+async def change_my_password(
+    body: ChangePasswordRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    """Change the authenticated user's password.
+
+    1. Verify the current password via ROPC grant (so we validate before mutating).
+    2. Update the password through the Keycloak Admin REST API.
+    """
+    kc_url = os.environ.get("KEYCLOAK_URL", "http://localhost:8080")
+    realm = os.environ.get("KEYCLOAK_REALM", "common-auth")
+    frontend_client_id = os.environ.get("KEYCLOAK_CLIENT_ID", "example-app")
+    admin_client_id = os.environ.get("KC_ADMIN_CLIENT_ID", "admin-api-client")
+    admin_client_secret = os.environ.get("KC_ADMIN_CLIENT_SECRET", "")
+
+    if body.currentPassword == body.newPassword:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_password", "message": "新しいパスワードは現在のパスワードと異なる値にしてください"},
+        )
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # ── Step 1: Verify current password via ROPC ───────────────────────
+        verify_resp = await client.post(
+            f"{kc_url}/realms/{realm}/protocol/openid-connect/token",
+            data={
+                "grant_type": "password",
+                "client_id": frontend_client_id,
+                "username": user.email,
+                "password": body.currentPassword,
+            },
+        )
+        if verify_resp.status_code != 200:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "invalid_current_password", "message": "現在のパスワードが正しくありません"},
+            )
+
+        # ── Step 2: Obtain admin token ─────────────────────────────────────
+        if not admin_client_secret:
+            logger.error("KC_ADMIN_CLIENT_SECRET is not set")
+            return JSONResponse(
+                status_code=503,
+                content={"error": "not_configured", "message": "Admin API not configured"},
+            )
+
+        token_resp = await client.post(
+            f"{kc_url}/realms/{realm}/protocol/openid-connect/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": admin_client_id,
+                "client_secret": admin_client_secret,
+            },
+        )
+        if token_resp.status_code != 200:
+            logger.error("Admin token request failed: %s", token_resp.text)
+            return JSONResponse(
+                status_code=503,
+                content={"error": "admin_token_failed", "message": "管理トークンの取得に失敗しました"},
+            )
+
+        admin_token = token_resp.json()["access_token"]
+
+        # ── Step 3: Update password via Admin API ──────────────────────────
+        update_resp = await client.put(
+            f"{kc_url}/admin/realms/{realm}/users/{user.sub}/reset-password",
+            headers={"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"},
+            json={"type": "password", "value": body.newPassword, "temporary": False},
+        )
+
+        if update_resp.status_code not in (200, 204):
+            error_text = update_resp.text
+            logger.error("Password update failed [%s]: %s", update_resp.status_code, error_text)
+            try:
+                detail = update_resp.json().get("errorMessage", "パスワードの変更に失敗しました")
+            except Exception:
+                detail = "パスワードの変更に失敗しました"
+            return JSONResponse(
+                status_code=400,
+                content={"error": "update_failed", "message": detail},
+            )
+
+    logger.info("Password changed for user %s", user.sub)
+    return Response(status_code=204)
 
 
 # Error handlers

@@ -568,6 +568,19 @@ async def accept_invitation(
     realm_name: str = inv["realm_name"]
     tenant_uuid = inv["tenant_id"]
 
+    # ── Step 1.5: Check for duplicate KC user (prevents 500 on re-invite) ────
+    existing_kc_users = await kc.find_users_by_email(email)
+    if existing_kc_users:
+        logger.warning(
+            "accept_invitation: KC user already exists for email '%s' (tenant '%s'). "
+            "Marking invitation as accepted without re-creating the user.",
+            email, realm_name,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="already_accepted",
+        )
+
     # ── Step 2: Get MFA policy from KC group (NEW-2) ──────────────────────────
     mfa_enabled = False
     mfa_method = "totp"
