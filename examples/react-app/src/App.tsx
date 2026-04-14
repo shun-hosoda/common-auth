@@ -9,7 +9,6 @@ import SecuritySettings from './pages/SecuritySettings'
 import PersonalSecuritySettings from './pages/PersonalSecuritySettings'
 import AdminInvitations from './pages/AdminInvitations'
 import InviteAccept from './pages/InviteAccept'
-import MfaSetupRedirect from './pages/MfaSetupRedirect'
 
 const ADMIN_UNAUTHORIZED = (
   <div className="container">
@@ -84,12 +83,6 @@ function App() {
           }
         >
           <AdminClients />
-        </AuthGuard>
-      } />
-      {/* MFA setup redirect page — opened in a new tab */}
-      <Route path="/me/mfa-setup" element={
-        <AuthGuard fallback={<div className="loading">Loading...</div>}>
-          <MfaSetupRedirect />
         </AuthGuard>
       } />
     </Routes>

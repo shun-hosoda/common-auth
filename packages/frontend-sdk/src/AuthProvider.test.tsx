@@ -41,6 +41,7 @@ jest.mock("oidc-client-ts", () => ({
     signoutRedirect: mockSignoutRedirect,
     events: mockEvents,
   })),
+  WebStorageStateStore: jest.fn().mockImplementation(() => ({})),
 }));
 
 // --- Helpers ---
@@ -206,63 +207,6 @@ describe("AuthProvider", () => {
       expect(mockSignoutRedirect).toHaveBeenCalledWith({
         id_token_hint: "fake-id-token",
       });
-    });
-  });
-
-  describe("configureMFA", () => {
-    it("calls signinRedirect with kc_action=CONFIGURE_TOTP and returnTo state", async () => {
-      const mockUser = createMockUser();
-      mockGetUser.mockResolvedValue(mockUser);
-      mockSigninRedirect.mockResolvedValue(undefined);
-
-      const { getAuth } = renderWithAuth();
-      await waitFor(() => {
-        expect(screen.getByTestId("consumer")).toHaveTextContent("authenticated");
-      });
-
-      await act(async () => {
-        await getAuth().configureMFA({ returnTo: "/me/security" });
-      });
-
-      expect(mockSigninRedirect).toHaveBeenCalledWith({
-        extraQueryParams: { kc_action: "CONFIGURE_TOTP" },
-        state: { returnTo: "/me/security" },
-      });
-    });
-
-    it("calls signinRedirect without state when no returnTo", async () => {
-      const mockUser = createMockUser();
-      mockGetUser.mockResolvedValue(mockUser);
-      mockSigninRedirect.mockResolvedValue(undefined);
-
-      const { getAuth } = renderWithAuth();
-      await waitFor(() => {
-        expect(screen.getByTestId("consumer")).toHaveTextContent("authenticated");
-      });
-
-      await act(async () => {
-        await getAuth().configureMFA();
-      });
-
-      expect(mockSigninRedirect).toHaveBeenCalledWith({
-        extraQueryParams: { kc_action: "CONFIGURE_TOTP" },
-        state: undefined,
-      });
-    });
-
-    it("throws error when user is not authenticated", async () => {
-      mockGetUser.mockResolvedValue(null);
-
-      const { getAuth } = renderWithAuth();
-      await waitFor(() => {
-        expect(screen.getByTestId("consumer")).toHaveTextContent("ready");
-      });
-
-      await expect(
-        act(async () => {
-          await getAuth().configureMFA({ returnTo: "/me/security" });
-        })
-      ).rejects.toThrow("User must be authenticated to configure MFA");
     });
   });
 

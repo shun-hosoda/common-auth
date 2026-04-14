@@ -22,8 +22,6 @@ export default function PersonalSecuritySettings() {
   const [status, setStatus] = useState<MfaStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [mfaLoading, setMfaLoading] = useState(false)
-  const [mfaCompleted, setMfaCompleted] = useState(false)
 
   // Password change modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -41,35 +39,6 @@ export default function PersonalSecuritySettings() {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     }
   }, [])
-
-  // 別タブで開いた MFA 設定が完了したときの BroadcastChannel 通知を受け取る
-  useEffect(() => {
-    let bc: BroadcastChannel | null = null
-    try {
-      bc = new BroadcastChannel('mfa-configured')
-      bc.onmessage = async (event: MessageEvent) => {
-        if (event.data?.type === 'completed') {
-          setMfaLoading(false)  // 別タブ作業完了 → ボタンを解放
-          setMfaCompleted(true)
-          // MFA ステータスを最新状態に更新
-          const token = getAccessToken()
-          if (token) {
-            try {
-              const data = await getMfaStatus(token)
-              setStatus(data)
-            } catch {
-              // 更新失敗は無視
-            }
-          }
-        }
-      }
-    } catch {
-      // BroadcastChannel 非対応環境は無視
-    }
-    return () => {
-      bc?.close()
-    }
-  }, [getAccessToken])
 
   const isSuperAdmin = hasRole('super_admin')
   const isTenantAdmin = hasRole('tenant_admin')
@@ -231,29 +200,6 @@ export default function PersonalSecuritySettings() {
 
           {!loading && (
             <>
-            {/* MFA 設定完了バナー */}
-            {mfaCompleted && (
-              <div style={{
-                background: '#dcfce7', border: '1px solid #86efac',
-                borderRadius: t.radiusLg, padding: '16px 20px',
-                marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px',
-              }}>
-                <span style={{ fontSize: '1.5rem' }}>✅</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: '#166534', fontSize: '0.95rem' }}>MFA設定が完了しました</div>
-                  <div style={{ color: '#166534', fontSize: '0.8rem', marginTop: '2px' }}>次回ログイン時からMFA認証が有効になります。</div>
-                </div>
-                <button
-                  onClick={() => setMfaCompleted(false)}
-                  aria-label="閉じる"
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: '1.1rem', color: '#166534', padding: '4px',
-                    lineHeight: 1,
-                  }}
-                >✕</button>
-              </div>
-            )}
             <div style={{
               background: t.surface, border: `1px solid ${t.border}`,
               borderRadius: t.radiusLg, padding: '24px', boxShadow: t.shadowSm,
@@ -269,36 +215,15 @@ export default function PersonalSecuritySettings() {
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {status?.mfa_enabled ? (
-                  <button
-                    onClick={() => {
-                      setMfaCompleted(false)
-                      // 別タブで MFA 設定フローを開始する
-                      window.open('/me/mfa-setup', '_blank')
-                      // 別タブが開いている間はボタンを disabled にする
-                      // BroadcastChannel の完了通知を受け取ったら解除される
-                      setMfaLoading(true)
-                    }}
-                    disabled={mfaLoading}
-                    style={{
-                      padding: '10px 16px', borderRadius: t.radiusMd,
-                      background: mfaLoading ? t.textMuted : t.primary, color: t.textInverse,
-                      border: 'none', cursor: mfaLoading ? 'not-allowed' : 'pointer', fontWeight: 600,
-                    }}
-                  >
-                    {mfaLoading ? '別タブで設定中...' : (status.mfa_configured ? 'MFAを再設定する' : 'MFAを設定する')}
-                  </button>
-                ) : (
-                  <div style={{
-                    padding: '10px 16px', borderRadius: t.radiusMd,
-                    background: '#f1f5f9', color: t.textMuted,
-                    fontSize: '0.875rem',
-                  }}>
-                    MFAはテナント管理者によって有効化されていません
-                  </div>
-                )}
-              </div>
+              {!status?.mfa_enabled && (
+                <div style={{
+                  padding: '10px 16px', borderRadius: t.radiusMd,
+                  background: '#f1f5f9', color: t.textMuted,
+                  fontSize: '0.875rem',
+                }}>
+                  MFAはテナント管理者によって有効化されていません
+                </div>
+              )}
 
               <div style={{
                 marginTop: '18px', padding: '12px 16px',
@@ -306,7 +231,7 @@ export default function PersonalSecuritySettings() {
                 fontSize: '0.82rem', color: t.textMuted, lineHeight: 1.6,
               }}>
                 {status?.mfa_enabled
-                  ? '「MFAを設定する」を押すと別タブでKeycloakの認証画面が開きます。TOTP（認証アプリ）の設定が完了すると、このページに自動的に完了通知が届きます。'
+                  ? 'MFAが有効です。MFAの設定・再設定はテナント管理者にお問い合わせください。'
                   : 'MFAを利用するには、テナント管理者がセキュリティ設定画面からMFAを有効化する必要があります。'}
               </div>
             </div>

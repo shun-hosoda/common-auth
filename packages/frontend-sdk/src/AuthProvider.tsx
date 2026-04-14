@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { UserManager, User } from "oidc-client-ts";
+import { UserManager, User, WebStorageStateStore } from "oidc-client-ts";
 import { AuthContext } from "./AuthContext";
 import type { AuthProviderProps } from "./types";
 
@@ -57,6 +57,10 @@ export function AuthProvider({
         response_type: "code",
         scope,
         automaticSilentRenew,
+        // localStorage を使用することでタブ間でユーザーセッションを共有する。
+        // changePassword 後の returnTo 復帰フローなど、リダイレクト先でもセッションが参照できる。
+        // リダイレクトフローの state/nonce は sessionStorage（タブ単位）のままなのでセキュリティ上の問題はない。
+        userStore: new WebStorageStateStore({ store: window.localStorage }),
       }),
     [authority, clientId, redirectUri, postLogoutRedirectUri, scope, automaticSilentRenew]
   );
@@ -156,26 +160,6 @@ export function AuthProvider({
     });
   }, [userManager, user]);
 
-  const configureMFA = useCallback(async (options?: { returnTo?: string; broadcastCompletion?: string }) => {
-    if (!user) {
-      throw new Error("User must be authenticated to configure MFA");
-    }
-    // userManager.signinRedirect 経由で kc_action=CONFIGURE_TOTP を送信する。
-    // これにより oidc-client-ts が state を sessionStorage に保存し、
-    // Keycloak からのリダイレクトバック時に Callback ページが正常に処理できる。
-    // 手動で URL を組み立てると state が保存されず Callback で失敗する。
-    // state に returnTo / broadcastCompletion を含めることで
-    // Callback 後に元ページへ復帰 or BroadcastChannel で通知できる。
-    const stateData: { returnTo?: string; broadcastCompletion?: string } = {};
-    if (options?.returnTo) stateData.returnTo = options.returnTo;
-    if (options?.broadcastCompletion) stateData.broadcastCompletion = options.broadcastCompletion;
-    const hasState = Object.keys(stateData).length > 0;
-    await userManager.signinRedirect({
-      extraQueryParams: { kc_action: 'CONFIGURE_TOTP' },
-      state: hasState ? stateData : undefined,
-    });
-  }, [userManager, user]);
-
   const getAccessToken = useCallback(() => {
     return user?.access_token || null;
   }, [user]);
@@ -188,14 +172,14 @@ export function AuthProvider({
     [user]
   );
 
-  const handleCallback = useCallback(async (): Promise<{ returnTo?: string; broadcastCompletion?: string } | undefined> => {
+  const handleCallback = useCallback(async (): Promise<{ returnTo?: string } | undefined> => {
     try {
       setError(null);
       const callbackUser = await userManager.signinRedirectCallback();
       setUser(callbackUser);
-      // signinRedirect 時に state: { returnTo, broadcastCompletion } を渡した場合、
+      // signinRedirect 時に state: { returnTo } を渡した場合、
       // callbackUser.state に格納されて返ってくる。
-      const userState = callbackUser.state as { returnTo?: string; broadcastCompletion?: string } | undefined;
+      const userState = callbackUser.state as { returnTo?: string } | undefined;
       return userState ?? undefined;
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Callback processing failed"));
@@ -214,12 +198,11 @@ export function AuthProvider({
       register,
       resetPassword,
       changePassword,
-      configureMFA,
       handleCallback,
       getAccessToken,
       hasRole,
     }),
-    [user, isLoading, error, login, logout, register, resetPassword, changePassword, configureMFA, handleCallback, getAccessToken, hasRole]
+    [user, isLoading, error, login, logout, register, resetPassword, changePassword, handleCallback, getAccessToken, hasRole]
   );
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
