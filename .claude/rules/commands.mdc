@@ -1,0 +1,44 @@
+---
+description: スラッシュコマンドの定義。ユーザーが /review, /fix, /re-review, /push, /comment を入力した際に発動。
+alwaysApply: true
+---
+
+# スラッシュコマンド
+
+## /quick — 高速実装モード（トークン消費最小化）
+手順: _summary.md参照 → TDD → Level 1チェック → 完了
+
+## /batch — バッチ実装モード（複数Stepまとめて実装）
+引数: /batch 1-3, /batch all
+手順: 複数Step連続実装 → 各Stepテスト → 全完了後Level 2レビュー
+
+## /test — 単体テスト実行・分析
+引数: /test, /test --integration, /test --e2e, /test --all, /test --failed, /test --coverage
+手順: pytest実行 → 失敗分析 → 自動修正提案
+
+## /cycle — 実装・テスト・レビュー自律サイクル
+引数: /cycle, /cycle <step>, /cycle --steps 1,2,3, /cycle --all
+手順: TDD実装 → テスト → セルフレビュー → 修正 → APPROVE → 完了
+
+## /design — 設計会議（5人専門家）
+手順: persona.md確認 → prd.md確認 → SKILL.md実行 → ログ保存
+
+## /implement — 実装計画会議（5人専門家）
+手順: persona.md確認 → 設計確認 → SKILL.md実行 → 計画保存
+
+## /review — レビューボード（5人専門家）
+手順: persona.md確認 → 差分取得 → SKILL.md実行 → 判定出力 → ログ保存
+
+## /fix — MUST FIX / SHOULD FIX 修正
+手順: 指摘抽出 → 設計書修正 → コード修正 → テスト → サマリー出力
+
+## /re-review — 修正後の再レビュー
+手順: 前回指摘読込 → 差分取得 → 解決確認 → 新規問題確認 → 判定出力
+ループ制御: 3回ループで解決しない → ユーザーに判断を仰ぐ
+
+## /push — コミット＆プッシュ
+前提: APPROVE済みであること
+手順: コミットメッセージ生成 → git add → commit → push
+
+## /comment — PRコメント投稿
+手順: PR特定 → レビュー結果整形 → gh pr comment 投稿

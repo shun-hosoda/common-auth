@@ -1,0 +1,19 @@
+---
+description: レビューサイクルの制御ルール。コード変更・PR操作時に常時適用。
+alwaysApply: true
+---
+
+# Review Cycle
+
+## サイクル全体像
+実装 → /review → /fix → /re-review → /push （MUST FIXが残ればループ）
+
+## 差分ベースレビューの原則
+gh pr diff, git diff --cached, git diff 等で差分のみ対象。
+500行超は分割レビュー、複数関心事のPRは分割提案。
+
+## レビューの状態管理
+round, verdict, must_fix, should_fix, resolved を追跡。
+
+## エスカレーション
+3ラウンド未解決 → ADR起票検討。専門家間の対立 → ユーザーに判断。

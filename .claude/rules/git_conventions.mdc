@@ -39,35 +39,34 @@ Conventional Commitsに準拠する。
 
 ## 禁止事項
 
-- `main` への直接プッシュ禁止
+- `main` への直接プッシュ禁止（明示的な指示がない限り）
 - force push 禁止（明示的な指示がない限り）
 - シークレット情報のコミット禁止
 
 ## /push コマンド実行仕様
 
-`/push` を受信したら以下のターミナルコマンドを **Agent として順に実行する**:
+`/push` を受信したら以下を **Agent として順に実行する**:
 
 ```bash
 # 1. シークレット混入チェック
 git status
+# .env, *.pem, *.key 等が含まれていないことを確認
+# 検出した場合は中断し警告を出力する
 
-# 2. ステージング
-git add .gitignore \
-  infra/docker-compose.yml \
-  infra/docker-compose-totp.yml \
-  infra/keycloak/realm-export.json \
-  infra/keycloak/realm-export-totp.json \
-  infra/keycloak/.env.example \
-  docs/prd/prd.md \
-  docs/design/logs/design-001-mfa.md \
-  docs/adr/adr-001-keycloak-mfa.md \
-  docs/implementation/logs/impl-001-mfa.md \
-  docs/review/logs/2026-03-20_120000_design_mfa-infrastructure.md \
-  CLAUDE.md
+# 2. 型チェック（.tsx/.jsx/.ts/.py を含む場合）
+# プロジェクト固有の型チェックコマンドは .ai-project/ を参照
 
-# 3. コミット
-git commit -m "feat(auth): Keycloak MFA Step1/Step2 実装（メールOTP + TOTP）"
+# 3. ステージング
+# 変更されたファイルを git add する
+# プロジェクト固有のステージング対象は .ai-project/ を参照
 
-# 4. プッシュ
-git push origin main
+# 4. コミット
+# Conventional Commits形式でコミットメッセージを生成
+git commit -m "<type>(<scope>): <description>"
+
+# 5. プッシュ
+git push origin <branch>
 ```
+
+> ユーザーの許可確認は不要。/push コマンドの受信をもって実行許可とみなす。
+> シークレットファイルが検出された場合のみ中断し、警告を出力する。

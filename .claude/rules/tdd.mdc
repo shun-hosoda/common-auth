@@ -1,0 +1,22 @@
+---
+description: テスト駆動開発のルール。テストファイル作成・実装時に適用。
+globs: "{src/**,tests/**}"
+alwaysApply: false
+---
+
+# TDD: テスト駆動開発
+
+## 原則
+1. Red: 失敗するテストを先に書く
+2. Green: テストをパスする最小限の実装
+3. Refactor: コードを改善
+
+## テスト構造
+tests/unit/, tests/integration/, tests/e2e/
+
+## テスト命名規約
+ファイル: test_*.py / *.test.ts / *_test.go
+関数: test_[対象]_[条件]_[期待結果]
+
+## 実装手順
+PRDから受入基準抽出 → テストケース変換 → Red → Green → Refactor

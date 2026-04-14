@@ -44,7 +44,7 @@ Eng:  「実装の複雑度と工数の観点から...」
 Arch: 「APIエンドポイントは以下の構成を提案」
       - POST /api/users
       - GET  /api/users/{id}
-      
+
 DB:   「Archの提案に対して、usersテーブルのスキーマは...」
       「外部キーとして...が必要」
 
