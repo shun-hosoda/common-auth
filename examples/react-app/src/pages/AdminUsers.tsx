@@ -26,6 +26,9 @@ import {
   type DropdownItem,
   type NavItem,
 } from '../components/layout'
+import {
+  MdHome, MdPeople, MdLock, MdBusiness, MdManageAccounts, MdLogout, MdSecurity,
+} from 'react-icons/md'
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -563,15 +566,15 @@ export default function AdminUsers() {
 
   // ─── render ────────────────────────────────────────────────────────────────
   const navItems: NavItem[] = [
-    { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
-    ...(isAdmin      ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
-    ...(isAdmin      ? [{ label: 'セキュリティ設定', icon: '🔒', path: '/security' }] : []),
-    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
+    { label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' },
+    ...(isAdmin      ? [{ label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' }] : []),
+    ...(isAdmin      ? [{ label: 'セキュリティ設定', icon: <MdLock />, path: '/security' }] : []),
+    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: <MdBusiness />, path: '/admin/clients' }] : []),
   ]
 
   const dropdownItems: DropdownItem[] = [
-    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
-    { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
+    { label: '個人セキュリティ設定', icon: <MdManageAccounts />, onClick: () => navigate('/me/security') },
+    { label: 'ログアウト', icon: <MdLogout />, onClick: logout, danger: true },
   ]
 
   return (
@@ -640,7 +643,7 @@ export default function AdminUsers() {
           {/* Page header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '20px', flexWrap: 'wrap' }}>
             <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: t.text, flex: 1 }}>
-              👥 ユーザー管理
+              <MdPeople style={{ verticalAlign: 'middle', marginRight: 6 }} /> ユーザー管理
               {isSuperAdmin && (
                 <span style={{ fontSize: '0.875rem', fontWeight: 400, color: t.textMuted, marginLeft: '0.5rem' }}>
                   — 全テナント
@@ -852,7 +855,7 @@ export default function AdminUsers() {
         <div style={overlay} onClick={(e) => { if (e.target === e.currentTarget && !mfaLoading) setMfaTarget(null) }}>
           <div style={mfaModalBox}>
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔐</div>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}><MdSecurity /></div>
               <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>MFA 設定をリセット</h2>
               <p style={{ margin: 0, color: t.textMuted, fontSize: '0.875rem', lineHeight: 1.6 }}>
                 <strong>{mfaTarget.displayName || mfaTarget.email}</strong> の

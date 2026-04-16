@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { t } from '../theme/tokens'
+import { MdKey, MdVisibility, MdVisibilityOff } from 'react-icons/md'
 import { changePasswordApi, ChangePasswordError } from '../api/accountApi'
+import { t } from '../theme/tokens'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ function PasswordField({
             lineHeight: 1,
           }}
         >
-          {show ? '🙈' : '👁️'}
+          {show ? <MdVisibilityOff /> : <MdVisibility />}
         </button>
       </div>
     </div>
@@ -214,7 +215,7 @@ export function ChangePasswordModal({ open, token, onClose, onSuccess }: ChangeP
             id="change-pw-title"
             style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: t.text }}
           >
-            🔑 パスワードを変更
+            <MdKey style={{ verticalAlign: 'middle', marginRight: 4 }} /> パスワードを変更
           </h2>
           <button
             type="button"
@@ -305,7 +306,7 @@ export function ChangePasswordModal({ open, token, onClose, onSuccess }: ChangeP
                     lineHeight: 1,
                   }}
                 >
-                  {showCurrent ? '🙈' : '👁️'}
+                  {showCurrent ? <MdVisibilityOff /> : <MdVisibility />}
                 </button>
               </div>
             </div>

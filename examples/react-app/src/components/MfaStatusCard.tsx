@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@common-auth/react'
 import { type MfaStatus, getMfaStatus } from '../api/adminApi'
 import { t } from '../theme/tokens'
+import { MdLockOpen, MdWarning, MdCheckCircle } from 'react-icons/md'
+import type { ReactNode } from 'react'
 
 /**
  * MfaStatusCard — displays the user's MFA status on the Dashboard.
@@ -48,7 +50,7 @@ export default function MfaStatusCard() {
   if (!status) return null
 
   // Determine visual state
-  let icon: string
+  let icon: ReactNode
   let label: string
   let description: string
   let bgColor: string
@@ -56,21 +58,21 @@ export default function MfaStatusCard() {
   let borderColor: string
 
   if (!status.mfa_enabled) {
-    icon = '🔓'
+    icon = <MdLockOpen />
     label = 'MFA 無効'
     description = 'テナントでMFAは有効化されていません'
     bgColor = '#f8fafc'
     textColor = t.textMuted
     borderColor = t.border
   } else if (!status.mfa_configured) {
-    icon = '⚠️'
+    icon = <MdWarning />
     label = 'MFA 要設定'
     description = 'MFAが有効ですが、まだ設定が完了していません。次回ログイン時に設定を求められます。'
     bgColor = '#fffbeb'
     textColor = '#92400e'
     borderColor = '#fbbf24'
   } else {
-    icon = '✅'
+    icon = <MdCheckCircle />
     label = 'MFA 有効'
     description = `${status.mfa_method === 'totp' ? 'TOTP（認証アプリ）' : status.mfa_method}で保護されています`
     bgColor = '#f0fdf4'

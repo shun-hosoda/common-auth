@@ -16,16 +16,22 @@ import {
 } from '../api/adminApi'
 import { t } from '../theme/tokens'
 import { useIsMobile, UserDropdown, SideNav, MobileDrawer, type NavItem, type DropdownItem } from '../components/layout'
+import {
+  MdHome, MdPeople, MdEmail, MdLock,
+  MdManageAccounts, MdLogout,
+  MdHourglassEmpty, MdCheckCircle, MdTimerOff, MdCancel, MdInbox,
+} from 'react-icons/md'
+import type { ReactNode } from 'react'
 
 // ─── Nav helpers ──────────────────────────────────────────────────────────────
 
 function buildNavItems(hasAdminRole: boolean): NavItem[] {
-  const items: NavItem[] = [{ label: 'ダッシュボード', icon: '🏠', path: '/dashboard' }]
+  const items: NavItem[] = [{ label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' }]
   if (hasAdminRole) {
     items.push(
-      { label: 'ユーザー管理', icon: '👥', path: '/admin/users' },
-      { label: '招待管理', icon: '📨', path: '/admin/invitations' },
-      { label: 'セキュリティ設定', icon: '🔒', path: '/security' },
+      { label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' },
+      { label: '招待管理', icon: <MdEmail />, path: '/admin/invitations' },
+      { label: 'セキュリティ設定', icon: <MdLock />, path: '/security' },
     )
   }
   return items
@@ -37,12 +43,12 @@ type EffectiveStatus = 'pending' | 'accepted' | 'expired' | 'revoked'
 
 const STATUS_CONFIG: Record<
   EffectiveStatus,
-  { icon: string; label: string; bg: string; fg: string }
+  { icon: ReactNode; label: string; bg: string; fg: string }
 > = {
-  pending:  { icon: '⏳', label: '招待中', bg: '#eff6ff', fg: '#1d4ed8' },
-  accepted: { icon: '✅', label: '承認済', bg: '#f0fdf4', fg: '#166534' },
-  expired:  { icon: '⌛', label: '期限切れ', bg: '#fafafa', fg: '#64748b' },
-  revoked:  { icon: '🚫', label: '取消済', bg: '#fef2f2', fg: '#991b1b' },
+  pending:  { icon: <MdHourglassEmpty />, label: '招待中', bg: '#eff6ff', fg: '#1d4ed8' },
+  accepted: { icon: <MdCheckCircle />, label: '承認済', bg: '#f0fdf4', fg: '#166534' },
+  expired:  { icon: <MdTimerOff />, label: '期限切れ', bg: '#fafafa', fg: '#64748b' },
+  revoked:  { icon: <MdCancel />, label: '取消済', bg: '#fef2f2', fg: '#991b1b' },
 }
 
 function StatusBadge({ status }: { status: EffectiveStatus }) {
@@ -282,9 +288,9 @@ export default function AdminInvitations() {
   const displayName = (user as any)?.displayName ?? (user as any)?.email ?? 'ユーザー'
   const initial = displayName.charAt(0).toUpperCase()
   const dropdownItems: DropdownItem[] = [
-    { label: 'ダッシュボード', icon: '🏠', onClick: () => navigate('/dashboard') },
-    { label: 'セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
-    { label: 'ログアウト', icon: '🚪', onClick: () => logout(), danger: true },
+    { label: 'ダッシュボード', icon: <MdHome />, onClick: () => navigate('/dashboard') },
+    { label: 'セキュリティ設定', icon: <MdManageAccounts />, onClick: () => navigate('/me/security') },
+    { label: 'ログアウト', icon: <MdLogout />, onClick: () => logout(), danger: true },
   ]
   const navList = buildNavItems(hasAdminRole)
 
@@ -472,7 +478,7 @@ export default function AdminInvitations() {
                 color: t.textMuted,
               }}
             >
-              <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
+              <div style={{ fontSize: '2.5rem', marginBottom: 12 }}><MdInbox /></div>
               <p>招待はありません</p>
               <button
                 onClick={() => navigate('/admin/users?invite=1')}

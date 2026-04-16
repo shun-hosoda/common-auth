@@ -10,6 +10,9 @@ import {
   type DropdownItem,
   type NavItem,
 } from '../components/layout'
+import {
+  MdHome, MdPeople, MdLock, MdBusiness, MdManageAccounts, MdLogout,
+} from 'react-icons/md'
 
 /* ─── Dashboard (main) ──────────────────────────────────── */
 export default function Dashboard() {
@@ -34,16 +37,16 @@ export default function Dashboard() {
 
   /* ---- Side navigation items (admin only) ---- */
   const navItems: NavItem[] = [
-    { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
-    ...(isAdmin ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
-    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: '🔒', path: '/security' }] : []),
-    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
+    { label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' },
+    ...(isAdmin ? [{ label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' }] : []),
+    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: <MdLock />, path: '/security' }] : []),
+    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: <MdBusiness />, path: '/admin/clients' }] : []),
   ]
 
   /* ---- User dropdown items ---- */
   const dropdownItems: DropdownItem[] = [
-    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
-    { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
+    { label: '個人セキュリティ設定', icon: <MdManageAccounts />, onClick: () => navigate('/me/security') },
+    { label: 'ログアウト', icon: <MdLogout />, onClick: logout, danger: true },
   ]
 
   return (

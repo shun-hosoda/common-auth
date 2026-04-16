@@ -12,6 +12,9 @@ import {
   type DropdownItem,
   type NavItem,
 } from '../components/layout'
+import {
+  MdHome, MdPeople, MdLock, MdBusiness, MdManageAccounts, MdLogout,
+} from 'react-icons/md'
 
 export default function PersonalSecuritySettings() {
   const { user, logout, hasRole, getAccessToken } = useAuth()
@@ -79,15 +82,15 @@ export default function PersonalSecuritySettings() {
   }, [getAccessToken])
 
   const navItems: NavItem[] = [
-    { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
-    ...(isAdmin ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
-    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: '🔒', path: '/security' }] : []),
-    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
+    { label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' },
+    ...(isAdmin ? [{ label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' }] : []),
+    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: <MdLock />, path: '/security' }] : []),
+    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: <MdBusiness />, path: '/admin/clients' }] : []),
   ]
 
   const dropdownItems: DropdownItem[] = [
-    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
-    { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
+    { label: '個人セキュリティ設定', icon: <MdManageAccounts />, onClick: () => navigate('/me/security') },
+    { label: 'ログアウト', icon: <MdLogout />, onClick: logout, danger: true },
   ]
 
   const statusLabel = !status
@@ -148,7 +151,7 @@ export default function PersonalSecuritySettings() {
 
         <main style={{ flex: 1, minWidth: 0, padding: isMobile ? '16px' : '24px' }}>
           <h1 style={{ margin: '0 0 20px', fontSize: '1.25rem', fontWeight: 700, color: t.text }}>
-            🔐 個人セキュリティ設定
+            <MdManageAccounts style={{ verticalAlign: 'middle', marginRight: 6 }} /> 個人セキュリティ設定
           </h1>
 
           {loading && <div style={{ color: t.textMuted }}>読み込み中...</div>}

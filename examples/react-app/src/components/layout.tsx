@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '../theme/tokens'
 
 // ─── useIsMobile ────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ export function Avatar({ initial, size = 36 }: { initial: string; size?: number 
 // ─── UserDropdown ───────────────────────────────────────────────────────────
 export interface DropdownItem {
   label: string
-  icon: string
+  icon: ReactNode
   onClick: () => void
   danger?: boolean
 }
@@ -129,7 +129,7 @@ export function UserDropdown({
 }
 
 // ─── SideNav ────────────────────────────────────────────────────────────────
-export interface NavItem { label: string; icon: string; path: string }
+export interface NavItem { label: string; icon: ReactNode; path: string }
 
 export function SideNav({ items, currentPath, onNavigate }: {
   items: NavItem[]; currentPath: string; onNavigate: (path: string) => void

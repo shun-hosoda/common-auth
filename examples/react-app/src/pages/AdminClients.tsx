@@ -7,6 +7,7 @@ import {
   listClients,
   createClient,
 } from '../api/adminApi'
+import { MdShield } from 'react-icons/md'
 
 // ─── Modal styles ─────────────────────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ export default function AdminClients() {
     <div>
       {/* Nav */}
       <nav className="nav">
-        <div className="nav-brand">🔐 Common Auth</div>
+        <div className="nav-brand"><MdShield style={{ verticalAlign: 'middle', marginRight: 4 }} /> Common Auth</div>
         <div className="user-info">
           <span>{adminEmail}</span>
           <button className="btn btn-secondary" onClick={logout}

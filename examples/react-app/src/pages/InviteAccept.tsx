@@ -20,6 +20,7 @@ import {
   validateInvitationToken,
 } from '../api/adminApi'
 import { t } from '../theme/tokens'
+import { MdLinkOff, MdCheckCircle, MdSearch, MdEmail, MdSecurity, MdVisibility, MdVisibilityOff } from 'react-icons/md'
 
 // ─── Referrer meta (S-1) ──────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ function ErrorScreen({ message }: { message: string }) {
   return (
     <CenteredCard>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: 16 }}>🔗</div>
+        <div style={{ fontSize: '3rem', marginBottom: 16 }}><MdLinkOff /></div>
         <h2 style={{ color: t.text, marginTop: 0, marginBottom: 8 }}>
           招待リンクが無効です
         </h2>
@@ -118,7 +119,7 @@ function SuccessScreen({ result }: { result: InvitationAcceptResponse }) {
   return (
     <CenteredCard>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '3.5rem', marginBottom: 16 }}>✅</div>
+        <div style={{ fontSize: '3.5rem', marginBottom: 16 }}><MdCheckCircle /></div>
         <h2 style={{ color: t.text, marginTop: 0, marginBottom: 8 }}>
           アカウントが作成されました
         </h2>
@@ -138,7 +139,7 @@ function SuccessScreen({ result }: { result: InvitationAcceptResponse }) {
             }}
           >
             <div style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: 4 }}>
-              🔐 多要素認証の設定が必要です
+              <MdSecurity style={{ verticalAlign: 'middle', marginRight: 4 }} /> 多要素認証の設定が必要です
             </div>
             <p style={{ color: '#1d4ed8', fontSize: '0.875rem', margin: 0, lineHeight: 1.5 }}>
               このテナントでは多要素認証（MFA）が必須です。
@@ -248,7 +249,7 @@ export default function InviteAccept() {
     return (
       <CenteredCard>
         <div style={{ textAlign: 'center', color: t.textMuted }}>
-          <div style={{ fontSize: '2rem', marginBottom: 12 }}>🔍</div>
+          <div style={{ fontSize: '2rem', marginBottom: 12 }}><MdSearch /></div>
           <p>招待リンクを確認しています...</p>
         </div>
       </CenteredCard>
@@ -271,7 +272,7 @@ export default function InviteAccept() {
       {/* Header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div style={{ fontSize: '2.5rem' }}>📨</div>
+          <div style={{ fontSize: '2.5rem' }}><MdEmail /></div>
         </div>
         <h1
           style={{
@@ -400,7 +401,7 @@ export default function InviteAccept() {
                 color: t.textMuted,
               }}
             >
-              {showPassword ? '🙈' : '👁'}
+              {showPassword ? <MdVisibilityOff /> : <MdVisibility />}
             </button>
           </div>
           {/* Password policy hint (S-8) */}

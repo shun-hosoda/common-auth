@@ -11,6 +11,10 @@ import {
   type DropdownItem,
   type NavItem,
 } from '../components/layout'
+import {
+  MdHome, MdPeople, MdLock, MdBusiness, MdManageAccounts, MdLogout,
+  MdSecurity, MdWarning,
+} from 'react-icons/md'
 
 /* ─── SecuritySettings ─────────────────────────────────── */
 export default function SecuritySettings() {
@@ -105,15 +109,15 @@ export default function SecuritySettings() {
 
   /* ---- Layout ---- */
   const navItems: NavItem[] = [
-    { label: 'ダッシュボード', icon: '🏠', path: '/dashboard' },
-    ...(isAdmin ? [{ label: 'ユーザー管理', icon: '👥', path: '/admin/users' }] : []),
-    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: '🔒', path: '/security' }] : []),
-    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: '🏢', path: '/admin/clients' }] : []),
+    { label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' },
+    ...(isAdmin ? [{ label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' }] : []),
+    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: <MdLock />, path: '/security' }] : []),
+    ...(isSuperAdmin ? [{ label: 'テナント管理', icon: <MdBusiness />, path: '/admin/clients' }] : []),
   ]
 
   const dropdownItems: DropdownItem[] = [
-    { label: '個人セキュリティ設定', icon: '🔐', onClick: () => navigate('/me/security') },
-    { label: 'ログアウト', icon: '🚪', onClick: logout, danger: true },
+    { label: '個人セキュリティ設定', icon: <MdManageAccounts />, onClick: () => navigate('/me/security') },
+    { label: 'ログアウト', icon: <MdLogout />, onClick: logout, danger: true },
   ]
 
   return (
@@ -169,7 +173,7 @@ export default function SecuritySettings() {
 
           {/* Page header */}
           <h1 style={{ margin: '0 0 20px', fontSize: '1.25rem', fontWeight: 700, color: t.text }}>
-            🔒 セキュリティ設定
+            <MdLock style={{ verticalAlign: 'middle', marginRight: 6 }} /> セキュリティ設定
           </h1>
 
           {/* Loading */}
@@ -343,7 +347,7 @@ export default function SecuritySettings() {
           }}>
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
               <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>
-                {confirmAction === 'enable' ? '🔐' : '⚠️'}
+                {confirmAction === 'enable' ? <MdSecurity /> : <MdWarning />}
               </div>
               <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>
                 {confirmAction === 'enable' ? 'MFAを有効にする' : 'MFAを無効にする'}
