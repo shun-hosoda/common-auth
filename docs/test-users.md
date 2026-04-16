@@ -1,24 +1,28 @@
 ﻿# テストユーザー一覧
 
-> このファイルは scripts/seed-test-users.ps1 で作成されるテストユーザーの一覧です。
+> このファイルは `scripts/seed-test-users.ps1` で作成されるテストユーザーの一覧です。
 > **本番環境には絶対に使用しないでください。**
 
 ## 初期ユーザー（realm-export.json に含まれる）
 
 | ユーザー名 | パスワード | ロール | テナント | 備考 |
 |-----------|----------|--------|---------|------|
-| super_admin@example.com | superadmin123 | super_admin | - | 全テナント管理者 |
-| dmin_acme-corp@example.com | dmin123 | tenant_admin | acme-corp | テナント管理者 |
-| 	estuser_acme-corp@example.com | password123 | user | acme-corp | 一般ユーザー |
-| emailmfa_acme-corp@example.com | password123 | user | acme-corp | Email MFA有効ユーザー |
-| dmin_globex-inc@example.com | dmin123 | tenant_admin | globex-inc | テナント管理者 |
-| 	estuser_globex-inc@example.com | password123 | user | globex-inc | 一般ユーザー |
+| `super_admin@example.com` | `superadmin123` | super_admin | - | 全テナント管理者 |
+| `admin_acme-corp@example.com` | `admin123` | tenant_admin | acme-corp | テナント管理者 |
+| `testuser_acme-corp@example.com` | `password123` | user | acme-corp | 一般ユーザー |
+| `emailmfa_acme-corp@example.com` | `password123` | user | acme-corp | Email MFA有効ユーザー |
+| `admin_globex-inc@example.com` | `admin123` | tenant_admin | globex-inc | テナント管理者 |
+| `testuser_globex-inc@example.com` | `password123` | user | globex-inc | 一般ユーザー |
 
 ## seed スクリプトで作成されるユーザー
 
 実行コマンド:
-`powershell
+```powershell
 .\scripts\seed-test-users.ps1
+```
+
+### acme-corp テストユーザー（100件）
+
 | ユーザー名 | パスワード | ロール | テナント |
 |-----------|----------|--------|---------|
 | `user001_acme-corp@example.com` | `password123` | user | acme-corp |
@@ -226,4 +230,3 @@
 | `user098_globex-inc@example.com` | `password123` | user | globex-inc |
 | `user099_globex-inc@example.com` | `password123` | user | globex-inc |
 | `user100_globex-inc@example.com` | `password123` | user | globex-inc |
-

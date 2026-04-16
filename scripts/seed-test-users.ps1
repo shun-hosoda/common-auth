@@ -16,7 +16,8 @@ param(
     [int]   $UsersPerTenant = 100
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference  = "Stop"
+$ProgressPreference     = "SilentlyContinue"   # Invoke-RestMethod の進捗バーを非表示
 
 # ── 管理者トークン取得 ────────────────────────────────────────────────────────
 function Get-AdminToken {
@@ -43,14 +44,13 @@ function New-KcUser {
     $headers = @{ Authorization = "Bearer $Token"; "Content-Type" = "application/json" }
     $uri = "$KeycloakUrl/admin/realms/$Realm/users"
     try {
-        $resp = Invoke-WebRequest -Method Post -Uri $uri -Headers $headers `
-                    -Body ($Payload | ConvertTo-Json -Depth 10) -SkipHttpErrorCheck
-        if ($resp.StatusCode -eq 201) { return $true }
-        if ($resp.StatusCode -eq 409) { return "exists" }
-        Write-Warning "  HTTP $($resp.StatusCode): $($resp.Content)"
-        return $false
+        Invoke-RestMethod -Method Post -Uri $uri -Headers $headers `
+            -Body ($Payload | ConvertTo-Json -Depth 10) -ErrorAction Stop | Out-Null
+        return $true
     } catch {
-        Write-Warning "  Error: $_"
+        $statusCode = $_.Exception.Response.StatusCode.value__
+        if ($statusCode -eq 409) { return "exists" }
+        Write-Warning "  Error ($statusCode): $_"
         return $false
     }
 }
