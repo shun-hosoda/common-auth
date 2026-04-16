@@ -424,11 +424,12 @@ class TestPutMfaEnable:
         assert data["mfa_enabled"] is True
         assert data["mfa_method"] == "email"
 
-        # Email method: add email-authenticator-setup, remove CONFIGURE_TOTP
-        mock_kc.add_required_action_bulk.assert_called_once()
-        assert mock_kc.add_required_action_bulk.call_args[0][1] == "email-authenticator-setup"
-        mock_kc.remove_required_action_bulk.assert_called_once()
-        assert mock_kc.remove_required_action_bulk.call_args[0][1] == "CONFIGURE_TOTP"
+        # Email method: no credential setup needed, just remove both required actions
+        mock_kc.add_required_action_bulk.assert_not_called()
+        assert mock_kc.remove_required_action_bulk.call_count == 2
+        removed = [c.args[1] for c in mock_kc.remove_required_action_bulk.call_args_list]
+        assert "CONFIGURE_TOTP" in removed
+        assert "email-authenticator-setup" in removed
 
 
 # ── PUT /admin/security/mfa — Disable ────────────────────────────────────────
@@ -510,8 +511,11 @@ class TestPutMfaMethodChange:
         assert resp.status_code == 200
         # MFA reset should be called for each user (method change)
         mock_kc.reset_mfa.assert_called()
-        # Email → remove CONFIGURE_TOTP
-        mock_kc.remove_required_action_bulk.assert_called_once()
+        # Email → remove CONFIGURE_TOTP and email-authenticator-setup (no setup action needed)
+        assert mock_kc.remove_required_action_bulk.call_count == 2
+        removed = [c.args[1] for c in mock_kc.remove_required_action_bulk.call_args_list]
+        assert "CONFIGURE_TOTP" in removed
+        assert "email-authenticator-setup" in removed
 
     def test_email_to_totp(
         self, app: FastAPI, mock_kc: MagicMock
