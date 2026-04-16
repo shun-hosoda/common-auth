@@ -30,6 +30,27 @@
   "ssoSessionMaxLifespan": 36000,
   "clientScopes": [
     {
+      "name": "basic",
+      "description": "OpenID Connect scope for add all basic claims to the token",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "introspection.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "name": "web-origins",
       "description": "OpenID Connect scope for add allowed web origins to the access token",
       "protocol": "openid-connect",
@@ -269,6 +290,7 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "defaultClientScopes": [
+        "basic",
         "web-origins",
         "acr",
         "profile",
@@ -291,6 +313,7 @@
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
       "defaultClientScopes": [
+        "basic",
         "web-origins",
         "acr",
         "profile",
@@ -323,6 +346,7 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
+        "basic",
         "web-origins",
         "acr",
         "profile",
@@ -679,11 +703,15 @@
     "en"
   ],
   "defaultLocale": "ja",
-  "defaultRoles": [
-    "offline_access",
-    "uma_authorization",
-    "user"
-  ],
+  "defaultRole": {
+    "name": "default-roles-common-auth",
+    "description": "${role_default-roles}",
+    "composite": true,
+    "composites": {
+      "realm": ["offline_access", "uma_authorization", "user"],
+      "client": {}
+    }
+  },
   "components": {
     "org.keycloak.userprofile.UserProfileProvider": [
       {

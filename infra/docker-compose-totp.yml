@@ -28,7 +28,7 @@ services:
       retries: 5
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.5
+    image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
     command: start-dev --import-realm
     environment:
@@ -38,11 +38,9 @@ services:
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
       # --- Admin ---
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # --- Hostname (開発環境用: strict無効) ---
-      KC_HOSTNAME_STRICT: "false"
-      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
       # --- SMTP 不使用（TOTPフローはメール送信なし） ---
     volumes:
       - ./keycloak/realm-export-totp.json:/opt/keycloak/data/import/realm-export-totp.json:ro
