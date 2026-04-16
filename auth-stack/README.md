@@ -50,12 +50,14 @@ docker-compose up -d
   - ブラウザで直接Keycloakと通信
 
 **テストユーザー:**
+- `super_admin@example.com` / `superadmin123` (super_admin role, 全テナント管理者)
 - `testuser_acme-corp@example.com` / `password123` (user role, acme-corp)
 - `admin_acme-corp@example.com` / `admin123` (tenant_admin role, acme-corp)
 - `testuser_globex-inc@example.com` / `password123` (user role, globex-inc)
 - `admin_globex-inc@example.com` / `admin123` (tenant_admin role, globex-inc)
 
-> **super_admin ロールについて**: `super_admin` ロールはRealm定義に存在しますが、デフォルトでは割り当てユーザーがいません。Keycloak管理コンソール全体を操作するテストが必要な場合は、Keycloak管理コンソール（`admin` / `admin`）から手動でユーザーにロールを付与してください。
+> **大量テストユーザー（100件×2テナント）の作成:** `scripts/seed-test-users.ps1` を実行してください。  
+> 詳細は [docs/test-users.md](../docs/test-users.md) を参照。
 
 **クライアントの使い分け:**
 - **フロントエンドアプリ**: `example-app`を使用（React App）
