@@ -903,8 +903,8 @@
                         "defaultClientScopes":  [
                                                     "web-origins",
                                                     "acr",
-                                                    "roles",
                                                     "profile",
+                                                    "roles",
                                                     "basic",
                                                     "email"
                                                 ],
@@ -993,8 +993,8 @@
                         "defaultClientScopes":  [
                                                     "web-origins",
                                                     "acr",
-                                                    "roles",
                                                     "profile",
+                                                    "roles",
                                                     "basic",
                                                     "email",
                                                     "tenant"
@@ -1099,8 +1099,8 @@
                         "defaultClientScopes":  [
                                                     "web-origins",
                                                     "acr",
-                                                    "roles",
                                                     "profile",
+                                                    "roles",
                                                     "basic",
                                                     "email",
                                                     "tenant"
