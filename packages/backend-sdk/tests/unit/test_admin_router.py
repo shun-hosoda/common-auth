@@ -5,6 +5,7 @@ so no real Keycloak or network access is required.
 """
 
 import pytest
+import httpx
 from contextlib import contextmanager
 from typing import Generator
 from unittest.mock import AsyncMock, MagicMock
@@ -193,6 +194,21 @@ class TestCreateUser:
                 json={"email": "x@x.com", "password": "abc"},
             )
         assert resp.status_code == 403
+
+    def test_duplicate_email_returns_409(self, app: FastAPI, mock_kc: MagicMock) -> None:
+        """Keycloak 409 Conflict must surface as HTTP 409 (not 500)."""
+        req = httpx.Request("POST", "http://keycloak/admin/realms/common-auth/users")
+        resp_409 = httpx.Response(409, request=req)
+        mock_kc.create_user = AsyncMock(
+            side_effect=httpx.HTTPStatusError("Conflict", request=req, response=resp_409)
+        )
+        caller = _make_user(["tenant_admin"])
+        with _client(app, caller) as c:
+            resp = c.post(
+                "/api/admin/users",
+                json={"email": "dup@example.com", "password": "pass123"},
+            )
+        assert resp.status_code == 409
 
 
 # ── DELETE /admin/users/{id} ──────────────────────────────────────────────────

@@ -63,7 +63,7 @@ def wired_app() -> FastAPI:
 
 # Prefixes that are allowed in this backend. Any route outside these
 # must be explicitly added here (e.g. /health, /metrics).
-ALLOWED_PREFIXES: tuple[str, ...] = ("/api/admin", "/auth")
+ALLOWED_PREFIXES: tuple[str, ...] = ("/api/admin", "/auth", "/api/invitations")
 
 # Internal FastAPI routes that are always present and can be ignored.
 _INTERNAL_PATHS = frozenset({"/", "/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"})

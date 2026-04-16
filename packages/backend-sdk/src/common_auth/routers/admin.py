@@ -16,7 +16,10 @@ Environment variables required:
 import asyncio
 import os
 import logging
+from typing import cast
 from typing import Any, Literal
+
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -50,7 +53,7 @@ def _get_kc_admin(request: Request) -> KeycloakAdminClient:
             client_id=client_id,
             client_secret=client_secret,
         )
-    return request.app.state.kc_admin_client  # type: ignore[return-value]
+    return cast(KeycloakAdminClient, request.app.state.kc_admin_client)
 
 
 def _require_admin(user: AuthUser) -> None:
@@ -178,7 +181,18 @@ async def create_user(
         ],
     }
 
-    new_id = await kc.create_user(payload)
+    try:
+        new_id = await kc.create_user(payload)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 409:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User with this email already exists.",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Keycloak error: {exc.response.status_code}",
+        ) from exc
 
     # Add to tenant group and assign default role in parallel (best-effort)
     if new_id:
