@@ -49,6 +49,7 @@ services:
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
       - ./keycloak/themes/common-auth:/opt/keycloak/themes/common-auth:ro
+      - ./keycloak/providers:/opt/keycloak/providers:ro
     depends_on:
       keycloak-db:
         condition: service_healthy

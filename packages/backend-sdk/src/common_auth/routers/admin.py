@@ -197,19 +197,17 @@ async def create_user(
                 mfa_enabled = group_attrs.get("mfa_enabled", ["false"])[0]
                 mfa_method = group_attrs.get("mfa_method", ["totp"])[0]
                 if mfa_enabled == "true":
-                    # attributes と requiredActions を別々に更新（Keycloak 24 互換）
+                    # totp: CONFIGURE_TOTP を必須アクションとして付与
+                    # email: 認証コードをメールで受け取るだけなので required action は不要
+                    required_actions = ["CONFIGURE_TOTP"] if mfa_method == "totp" else []
                     await kc.update_user(new_id, {
                         "attributes": {
                             "tenant_id": [user.tenant_id],
                             "mfa_enabled": ["true"],
                             "mfa_method": [mfa_method],
                         },
+                        "requiredActions": required_actions,
                     })
-                    if mfa_method == "totp":
-                        # Fetch current user to merge requiredActions
-                        current = await kc.get_user(new_id)
-                        actions = list(set(current.get("requiredActions", []) + ["CONFIGURE_TOTP"]))
-                        await kc.update_user(new_id, {"requiredActions": actions})
             except Exception:
                 logger.warning(
                     "Failed to set MFA attributes for new user %s (best-effort)",
@@ -430,11 +428,16 @@ async def update_mfa_settings(
 
     if new_enabled and new_method == "totp":
         failed_action = await kc.add_required_action_bulk(user_ids, "CONFIGURE_TOTP")
+        # Email OTP setup action no longer needed — remove if present
+        await kc.remove_required_action_bulk(user_ids, "email-authenticator-setup")
+        failed_action = failed_action  # keep TOTP failures
+    elif new_enabled and new_method == "email":
+        # Email OTP: remove TOTP required action (no credential setup needed)
+        failed_action = await kc.remove_required_action_bulk(user_ids, "CONFIGURE_TOTP")
     else:
-        # Disabled or Email → remove CONFIGURE_TOTP
-        failed_action = await kc.remove_required_action_bulk(
-            user_ids, "CONFIGURE_TOTP"
-        )
+        # MFA disabled → remove both
+        failed_action = await kc.remove_required_action_bulk(user_ids, "CONFIGURE_TOTP")
+        await kc.remove_required_action_bulk(user_ids, "email-authenticator-setup")
 
     # ── 7. Invalidate active sessions for all affected users ──────────────
     # When MFA is enabled or method changes, force re-authentication so users

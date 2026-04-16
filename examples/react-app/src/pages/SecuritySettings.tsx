@@ -65,8 +65,7 @@ export default function SecuritySettings() {
     } finally {
       setLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [getAccessToken])
 
   useEffect(() => { fetchSettings() }, [fetchSettings])
 
@@ -83,6 +82,9 @@ export default function SecuritySettings() {
         mfa_enabled: mfaEnabled,
         mfa_method: mfaMethod,
       })
+      // サーバーレスポンスで UI 状態を同期（スイッチ・メソッド両方）
+      setMfaEnabled(result.mfa_enabled)
+      setMfaMethod(result.mfa_method)
       setServerEnabled(result.mfa_enabled)
       const failMsg = result.users_failed > 0
         ? `（${result.users_failed}名の更新に失敗）`
@@ -265,37 +267,26 @@ export default function SecuritySettings() {
                   </div>
                 </label>
 
-                {/* Email OTP (disabled) */}
-                <label
-                  aria-describedby="email-otp-note"
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: '10px',
-                    padding: '12px', borderRadius: t.radiusMd,
-                    border: `1px solid ${t.border}`,
-                    background: '#f8fafc',
-                    cursor: 'not-allowed', opacity: 0.6,
-                  }}
-                >
+                {/* Email OTP */}
+                <label style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '10px',
+                  padding: '12px', borderRadius: t.radiusMd, marginBottom: '8px',
+                  border: `1px solid ${mfaMethod === 'email' ? t.primary : t.border}`,
+                  background: mfaMethod === 'email' ? '#eff6ff' : 'transparent',
+                  cursor: 'pointer',
+                }}>
                   <input
                     type="radio"
                     name="mfa_method"
                     value="email"
-                    disabled
+                    checked={mfaMethod === 'email'}
+                    onChange={() => setMfaMethod('email')}
                     style={{ marginTop: '2px' }}
                   />
                   <div>
-                    <div style={{ fontWeight: 500, fontSize: '0.9rem', color: t.textMuted }}>
-                      メールOTP
-                      <span style={{
-                        marginLeft: '8px', fontSize: '0.7rem', fontWeight: 600,
-                        padding: '2px 6px', borderRadius: '4px',
-                        background: '#f1f5f9', color: t.textMuted,
-                      }}>
-                        準備中
-                      </span>
-                    </div>
-                    <div id="email-otp-note" style={{ fontSize: '0.8rem', color: t.textMuted, marginTop: '2px' }}>
-                      Keycloak 26以降で対応予定
+                    <div style={{ fontWeight: 500, fontSize: '0.9rem', color: t.text }}>メールOTP</div>
+                    <div style={{ fontSize: '0.8rem', color: t.textMuted, marginTop: '2px' }}>
+                      登録済みメールアドレスにワンタイムコードを送信
                     </div>
                   </div>
                 </label>

@@ -309,7 +309,31 @@ describe("AuthProvider", () => {
       expect(result).toBeUndefined();
     });
 
-    it("throws and sets error when signinRedirectCallback fails", async () => {
+    it("falls back to existing user when state is already consumed", async () => {
+      mockGetUser.mockResolvedValue(null);
+      mockSigninRedirectCallback.mockRejectedValue(new Error("No matching state found"));
+
+      const existingUser = createMockUser();
+      mockGetUser
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existingUser);
+
+      const { getAuth } = renderWithAuth();
+      await waitFor(() => {
+        expect(screen.getByTestId("consumer")).toHaveTextContent("ready");
+      });
+
+      let result: { returnTo?: string } | undefined;
+      await act(async () => {
+        result = await getAuth().handleCallback();
+      });
+
+      expect(result).toBeUndefined();
+      expect(getAuth().error).toBeNull();
+      expect(screen.getByTestId("consumer")).toHaveTextContent("authenticated");
+    });
+
+    it("throws and sets error when signinRedirectCallback fails and no user fallback", async () => {
       mockGetUser.mockResolvedValue(null);
       mockSigninRedirectCallback.mockRejectedValue(new Error("No matching state found"));
 

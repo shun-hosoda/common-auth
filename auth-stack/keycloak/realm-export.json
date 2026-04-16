@@ -479,6 +479,38 @@
       ]
     },
     {
+      "username": "emailmfa_acme-corp@example.com",
+      "email": "emailmfa_acme-corp@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "EmailMFA",
+      "lastName": "User",
+      "attributes": {
+        "tenant_id": [
+          "acme-corp"
+        ],
+        "mfa_enabled": [
+          "true"
+        ],
+        "mfa_method": [
+          "email"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ],
+      "groups": [
+        "/tenants/acme-corp"
+      ]
+    },
+    {
       "username": "admin_acme-corp@example.com",
       "email": "admin_acme-corp@example.com",
       "emailVerified": true,
@@ -612,7 +644,7 @@
     },
     {
       "alias": "unified-mfa-browser mfa-gate",
-      "description": "MFA gate: check mfa_enabled and mfa_method, then OTP",
+      "description": "MFA gate: check mfa_enabled, then branch by mfa_method",
       "providerId": "basic-flow",
       "topLevel": false,
       "builtIn": false,
@@ -624,15 +656,56 @@
           "priority": 10
         },
         {
+          "flowAlias": "unified-mfa-browser totp-branch",
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "authenticatorFlow": true
+        },
+        {
+          "flowAlias": "unified-mfa-browser email-branch",
+          "requirement": "CONDITIONAL",
+          "priority": 30,
+          "authenticatorFlow": true
+        }
+      ]
+    },
+    {
+      "alias": "unified-mfa-browser totp-branch",
+      "description": "TOTP MFA branch",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
           "authenticator": "conditional-user-attribute",
           "authenticatorConfig": "mfa-totp-condition",
           "requirement": "REQUIRED",
-          "priority": 20
+          "priority": 10
         },
         {
           "authenticator": "auth-otp-form",
           "requirement": "REQUIRED",
-          "priority": 30
+          "priority": 20
+        }
+      ]
+    },
+    {
+      "alias": "unified-mfa-browser email-branch",
+      "description": "Email OTP MFA branch",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "mfa-email-condition",
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "email-authenticator",
+          "requirement": "REQUIRED",
+          "priority": 20
         }
       ]
     }
@@ -653,6 +726,14 @@
         "attribute_expected_value": "totp",
         "not": "false"
       }
+    },
+    {
+      "alias": "mfa-email-condition",
+      "config": {
+        "attribute_name": "mfa_method",
+        "attribute_expected_value": "email",
+        "not": "false"
+      }
     }
   ],
   "browserFlow": "unified-mfa-browser",
@@ -670,6 +751,14 @@
       "enabled": true,
       "defaultAction": false,
       "priority": 10
+    },
+    {
+      "alias": "email-authenticator-setup",
+      "name": "Email OTP Setup",
+      "providerId": "email-authenticator-setup",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 15
     },
     {
       "alias": "UPDATE_PASSWORD",

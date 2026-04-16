@@ -215,6 +215,21 @@ button[type="submit"]:focus-visible {
   background: var(--bg-color);
 }
 
+/* Email OTP form: make resend/cancel hover state easier to read */
+#kc-otp-login-form input[name="resend"],
+#kc-otp-login-form input[name="cancel"] {
+  background: var(--surface-color);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+
+#kc-otp-login-form input[name="resend"]:hover,
+#kc-otp-login-form input[name="cancel"]:hover {
+  background: var(--bg-color);
+  color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
 /* ── Error / alert messages ─────────────────────────────────────────────────── */
 
 .alert-error,

@@ -471,8 +471,11 @@ class TestPutMfaDisable:
         attrs = mock_kc.set_user_attributes_bulk.call_args[0][1]
         assert attrs["mfa_enabled"] == ["false"]
         assert attrs["mfa_method"] == ["totp"]
-        # CONFIGURE_TOTP removed on disable
-        mock_kc.remove_required_action_bulk.assert_called_once()
+        # CONFIGURE_TOTP and email-authenticator-setup both removed on disable
+        assert mock_kc.remove_required_action_bulk.call_count == 2
+        removed_actions = [c.args[1] for c in mock_kc.remove_required_action_bulk.call_args_list]
+        assert "CONFIGURE_TOTP" in removed_actions
+        assert "email-authenticator-setup" in removed_actions
 
 
 # ── PUT /admin/security/mfa — Method change ──────────────────────────────────

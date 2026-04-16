@@ -182,6 +182,13 @@ export function AuthProvider({
       const userState = callbackUser.state as { returnTo?: string } | undefined;
       return userState ?? undefined;
     } catch (err) {
+      if (err instanceof Error && /No matching state found/i.test(err.message)) {
+        const currentUser = await userManager.getUser();
+        if (currentUser) {
+          setUser(currentUser);
+          return undefined;
+        }
+      }
       setError(err instanceof Error ? err : new Error("Callback processing failed"));
       throw err;
     }
