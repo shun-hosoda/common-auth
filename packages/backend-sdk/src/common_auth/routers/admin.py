@@ -432,8 +432,10 @@ async def update_mfa_settings(
         await kc.remove_required_action_bulk(user_ids, "email-authenticator-setup")
         failed_action = failed_action  # keep TOTP failures
     elif new_enabled and new_method == "email":
-        # Email OTP: remove TOTP required action (no credential setup needed)
-        failed_action = await kc.remove_required_action_bulk(user_ids, "CONFIGURE_TOTP")
+        # Email OTP: add setup required action so users are prompted on next login
+        failed_action = await kc.add_required_action_bulk(user_ids, "email-authenticator-setup")
+        # TOTP credential no longer needed — remove if present
+        await kc.remove_required_action_bulk(user_ids, "CONFIGURE_TOTP")
     else:
         # MFA disabled → remove both
         failed_action = await kc.remove_required_action_bulk(user_ids, "CONFIGURE_TOTP")

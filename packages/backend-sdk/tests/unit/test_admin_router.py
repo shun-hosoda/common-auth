@@ -424,7 +424,9 @@ class TestPutMfaEnable:
         assert data["mfa_enabled"] is True
         assert data["mfa_method"] == "email"
 
-        # Email method should remove CONFIGURE_TOTP, not add
+        # Email method: add email-authenticator-setup, remove CONFIGURE_TOTP
+        mock_kc.add_required_action_bulk.assert_called_once()
+        assert mock_kc.add_required_action_bulk.call_args[0][1] == "email-authenticator-setup"
         mock_kc.remove_required_action_bulk.assert_called_once()
         assert mock_kc.remove_required_action_bulk.call_args[0][1] == "CONFIGURE_TOTP"
 
