@@ -338,3 +338,253 @@ export async function acceptInvitation(
     body: JSON.stringify(body),
   })
 }
+
+// ── Group types ───────────────────────────────────────────────────────────────
+
+export interface Group {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface GroupListResponse {
+  items: Group[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface CreateGroupInput {
+  name: string
+  description?: string
+}
+
+export interface UpdateGroupInput {
+  name?: string
+  description?: string
+  is_active?: boolean
+}
+
+export interface GroupMember {
+  user_id: string
+  email: string
+  display_name: string | null
+  added_at: string
+}
+
+export interface GroupMembersResponse {
+  group_id: string
+  members: GroupMember[]
+  total: number
+}
+
+// ── Group operations ──────────────────────────────────────────────────────────
+
+export async function listGroups(
+  token: string,
+  page = 1,
+  pageSize = 20,
+  search?: string,
+): Promise<GroupListResponse> {
+  const qs = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  if (search) qs.set('search', search)
+  return request<GroupListResponse>(`/groups?${qs}`, token)
+}
+
+export async function createGroup(
+  token: string,
+  input: CreateGroupInput,
+): Promise<Group> {
+  return request<Group>('/groups', token, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updateGroup(
+  token: string,
+  groupId: string,
+  input: UpdateGroupInput,
+): Promise<Group> {
+  return request<Group>(`/groups/${groupId}`, token, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteGroup(token: string, groupId: string): Promise<void> {
+  return request<void>(`/groups/${groupId}`, token, { method: 'DELETE' })
+}
+
+export async function listGroupMembers(
+  token: string,
+  groupId: string,
+): Promise<GroupMembersResponse> {
+  return request<GroupMembersResponse>(`/groups/${groupId}/members`, token)
+}
+
+export async function addGroupMembers(
+  token: string,
+  groupId: string,
+  userIds: string[],
+): Promise<void> {
+  return request<void>(`/groups/${groupId}/members`, token, {
+    method: 'POST',
+    body: JSON.stringify({ user_ids: userIds }),
+  })
+}
+
+export async function removeGroupMember(
+  token: string,
+  groupId: string,
+  userId: string,
+): Promise<void> {
+  return request<void>(`/groups/${groupId}/members/${userId}`, token, { method: 'DELETE' })
+}
+
+// ── Audit log types ───────────────────────────────────────────────────────────
+
+export interface AuditLog {
+  id: string
+  tenant_id: string
+  actor_id: string | null
+  actor_email: string | null
+  action: string
+  resource_type: string | null
+  resource_id: string | null
+  details: Record<string, unknown>
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+}
+
+export interface AuditLogsResponse {
+  logs: AuditLog[]
+  total: number
+  page: number
+  per_page: number
+}
+
+// ── Audit log operations ──────────────────────────────────────────────────────
+
+export async function listAuditLogs(
+  token: string,
+  params?: {
+    tenant_id?: string
+    action?: string
+    actor_id?: string
+    from_dt?: string
+    to_dt?: string
+    page?: number
+    per_page?: number
+  },
+): Promise<AuditLogsResponse> {
+  const qs = new URLSearchParams()
+  if (params?.tenant_id) qs.set('tenant_id', params.tenant_id)
+  if (params?.action) qs.set('action', params.action)
+  if (params?.actor_id) qs.set('actor_id', params.actor_id)
+  if (params?.from_dt) qs.set('from_dt', params.from_dt)
+  if (params?.to_dt) qs.set('to_dt', params.to_dt)
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.per_page) qs.set('per_page', String(params.per_page))
+  const q = qs.toString()
+  return request<AuditLogsResponse>(`/audit/logs${q ? '?' + q : ''}`, token)
+}
+
+// ── Password policy types ─────────────────────────────────────────────────────
+
+export interface PasswordPolicy {
+  min_length: number
+  require_uppercase: boolean
+  require_digits: boolean
+  require_special: boolean
+  password_history: number
+  expire_days: number
+}
+
+// ── Password policy operations ────────────────────────────────────────────────
+
+export async function getPasswordPolicy(token: string): Promise<PasswordPolicy> {
+  return request<PasswordPolicy>('/security/password-policy', token)
+}
+
+export async function getPasswordPolicyForTenant(
+  token: string,
+  tenantId?: string,
+): Promise<PasswordPolicy> {
+  const qs = new URLSearchParams()
+  if (tenantId) qs.set('tenant_id', tenantId)
+  return request<PasswordPolicy>(`/security/password-policy${qs.toString() ? `?${qs.toString()}` : ''}`, token)
+}
+
+export async function updatePasswordPolicy(
+  token: string,
+  input: PasswordPolicy,
+): Promise<PasswordPolicy> {
+  return request<PasswordPolicy>('/security/password-policy', token, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updatePasswordPolicyForTenant(
+  token: string,
+  input: PasswordPolicy,
+  tenantId?: string,
+): Promise<PasswordPolicy> {
+  const qs = new URLSearchParams()
+  if (tenantId) qs.set('tenant_id', tenantId)
+  return request<PasswordPolicy>(`/security/password-policy${qs.toString() ? `?${qs.toString()}` : ''}`, token, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+// ── Session settings types ────────────────────────────────────────────────────
+
+export interface SessionSettings {
+  access_token_lifespan: number
+  sso_session_idle_timeout: number
+  sso_session_max_lifespan: number
+}
+
+// ── Session settings operations ───────────────────────────────────────────────
+
+export async function getSessionSettings(token: string): Promise<SessionSettings> {
+  return request<SessionSettings>('/security/session', token)
+}
+
+export async function getSessionSettingsForTenant(
+  token: string,
+  tenantId?: string,
+): Promise<SessionSettings> {
+  const qs = new URLSearchParams()
+  if (tenantId) qs.set('tenant_id', tenantId)
+  return request<SessionSettings>(`/security/session${qs.toString() ? `?${qs.toString()}` : ''}`, token)
+}
+
+export async function updateSessionSettings(
+  token: string,
+  input: SessionSettings,
+): Promise<SessionSettings> {
+  return request<SessionSettings>('/security/session', token, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updateSessionSettingsForTenant(
+  token: string,
+  input: SessionSettings,
+  tenantId?: string,
+): Promise<SessionSettings> {
+  const qs = new URLSearchParams()
+  if (tenantId) qs.set('tenant_id', tenantId)
+  return request<SessionSettings>(`/security/session${qs.toString() ? `?${qs.toString()}` : ''}`, token, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}

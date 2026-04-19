@@ -280,3 +280,29 @@ CREATE UNIQUE INDEX uq_invitation_pending
 ALTER TABLE invitation_tokens ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON invitation_tokens
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
+
+-- -----------------------------------------------------------
+-- 監査ログテーブル (FT-003)
+-- 権限変更・グループ操作等の管理操作を記録する。
+-- 認証イベント（ログイン成功/失敗）は将来フェーズで Keycloak Events API プロキシとして追加。
+-- -----------------------------------------------------------
+CREATE TABLE audit_logs (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID         NOT NULL REFERENCES tenants(id),
+    actor_id      UUID         REFERENCES user_profiles(id) ON DELETE SET NULL,
+    actor_email   VARCHAR(255),               -- 削除対策で非正規化保持
+    action        VARCHAR(100) NOT NULL,       -- 'group.member.add' / 'security.mfa.update' 等
+    resource_type VARCHAR(50),
+    resource_id   VARCHAR(255),               -- グループID・ユーザーID等（UUID or 文字列）
+    details       JSONB        DEFAULT '{}',  -- アクション固有の追加情報
+    ip_address    INET,
+    user_agent    TEXT,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_tenant_id_created ON audit_logs(tenant_id, created_at DESC);
+CREATE INDEX idx_audit_logs_action            ON audit_logs(tenant_id, action);
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON audit_logs
+    USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);

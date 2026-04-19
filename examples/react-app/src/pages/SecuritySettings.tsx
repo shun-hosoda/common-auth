@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@common-auth/react'
-import { type MfaSettings, getMfaSettings, updateMfaSettings } from '../api/adminApi'
+import {
+  type MfaSettings, getMfaSettings, updateMfaSettings,
+  type PasswordPolicy, getPasswordPolicyForTenant, updatePasswordPolicyForTenant,
+  type SessionSettings, getSessionSettingsForTenant, updateSessionSettingsForTenant,
+} from '../api/adminApi'
 import { t } from '../theme/tokens'
 import {
   useIsMobile,
@@ -13,13 +17,14 @@ import {
 } from '../components/layout'
 import {
   MdHome, MdPeople, MdLock, MdBusiness, MdManageAccounts, MdLogout,
-  MdSecurity, MdWarning,
+  MdSecurity, MdWarning, MdGroup, MdHistory,
 } from 'react-icons/md'
 
 /* ─── SecuritySettings ─────────────────────────────────── */
 export default function SecuritySettings() {
   const { user, logout, hasRole, getAccessToken } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -34,6 +39,7 @@ export default function SecuritySettings() {
   const rawTenantId = profile?.tenant_id
   const tenantName  = Array.isArray(rawTenantId) ? rawTenantId[0] : (rawTenantId as string | undefined) ?? ''
   const tenantTitle = tenantName || (isSuperAdmin ? '全テナント管理' : 'Common Auth')
+  const tenantIdFromQuery = new URLSearchParams(location.search).get('tenant_id') ?? undefined
 
   /* ---- MFA form state ---- */
   const [loading, setLoading]       = useState(true)
@@ -48,6 +54,18 @@ export default function SecuritySettings() {
   /* ---- Confirm dialog ---- */
   const [showConfirm, setShowConfirm] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'enable' | 'disable'>('enable')
+
+  /* ---- Password Policy state ---- */
+  const [pp, setPp] = useState<PasswordPolicy | null>(null)
+  const [ppSaving, setPpSaving] = useState(false)
+  const [ppError, setPpError] = useState<string | null>(null)
+  const [ppSuccess, setPpSuccess] = useState<string | null>(null)
+
+  /* ---- Session Settings state ---- */
+  const [ss, setSs] = useState<SessionSettings | null>(null)
+  const [ssSaving, setSsSaving] = useState(false)
+  const [ssError, setSsError] = useState<string | null>(null)
+  const [ssSuccess, setSsSuccess] = useState<string | null>(null)
 
   /* ---- Fetch settings ---- */
   const fetchSettings = useCallback(async () => {
@@ -68,6 +86,80 @@ export default function SecuritySettings() {
   }, [getAccessToken])
 
   useEffect(() => { fetchSettings() }, [fetchSettings])
+
+  /* ---- Fetch Password Policy ---- */
+  useEffect(() => {
+    const token = getAccessToken()
+    if (!token) return
+    if (isSuperAdmin && !tenantIdFromQuery) {
+      setPpError('super_admin で表示するには tenant_id クエリ指定が必要です')
+      return
+    }
+    getPasswordPolicyForTenant(token, isSuperAdmin ? tenantIdFromQuery : undefined)
+      .then(setPp)
+      .catch(() => {})
+  }, [getAccessToken, isSuperAdmin, tenantIdFromQuery])
+
+  /* ---- Fetch Session Settings ---- */
+  useEffect(() => {
+    const token = getAccessToken()
+    if (!token) return
+    if (isSuperAdmin && !tenantIdFromQuery) {
+      setSsError('super_admin で表示するには tenant_id クエリ指定が必要です')
+      return
+    }
+    getSessionSettingsForTenant(token, isSuperAdmin ? tenantIdFromQuery : undefined)
+      .then(setSs)
+      .catch(() => {})
+  }, [getAccessToken, isSuperAdmin, tenantIdFromQuery])
+
+  /* ---- Save Password Policy ---- */
+  const handleSavePp = async () => {
+    const token = getAccessToken()
+    if (!token || !pp) return
+    if (isSuperAdmin && !tenantIdFromQuery) {
+      setPpError('super_admin で保存するには tenant_id クエリ指定が必要です')
+      return
+    }
+    setPpSaving(true); setPpError(null); setPpSuccess(null)
+    try {
+      const result = await updatePasswordPolicyForTenant(
+        token,
+        pp,
+        isSuperAdmin ? tenantIdFromQuery : undefined,
+      )
+      setPp(result)
+      setPpSuccess('✅ パスワードポリシーを保存しました')
+    } catch (e) {
+      setPpError(e instanceof Error ? e.message : '保存に失敗しました')
+    } finally {
+      setPpSaving(false)
+    }
+  }
+
+  /* ---- Save Session Settings ---- */
+  const handleSaveSs = async () => {
+    const token = getAccessToken()
+    if (!token || !ss) return
+    if (isSuperAdmin && !tenantIdFromQuery) {
+      setSsError('super_admin で保存するには tenant_id クエリ指定が必要です')
+      return
+    }
+    setSsSaving(true); setSsError(null); setSsSuccess(null)
+    try {
+      const result = await updateSessionSettingsForTenant(
+        token,
+        ss,
+        isSuperAdmin ? tenantIdFromQuery : undefined,
+      )
+      setSs(result)
+      setSsSuccess('✅ セッション設定を保存しました')
+    } catch (e) {
+      setSsError(e instanceof Error ? e.message : '保存に失敗しました')
+    } finally {
+      setSsSaving(false)
+    }
+  }
 
   /* ---- Save handler ---- */
   const handleSave = async () => {
@@ -112,8 +204,12 @@ export default function SecuritySettings() {
   /* ---- Layout ---- */
   const navItems: NavItem[] = [
     { label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' },
-    ...(isAdmin ? [{ label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' }] : []),
-    ...(isAdmin ? [{ label: 'セキュリティ設定', icon: <MdLock />, path: '/security' }] : []),
+    ...(isAdmin ? [
+      { label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' },
+      { label: 'グループ管理', icon: <MdGroup />, path: '/admin/groups' },
+      { label: '監査ログ', icon: <MdHistory />, path: '/admin/audit' },
+      { label: 'セキュリティ設定', icon: <MdLock />, path: '/security' },
+    ] : []),
     ...(isSuperAdmin ? [{ label: 'テナント管理', icon: <MdBusiness />, path: '/admin/clients' }] : []),
   ]
 
@@ -315,6 +411,103 @@ export default function SecuritySettings() {
               }}>
                 ⓘ 設定はテナント全体に適用されます。次回ログイン時からMFAが要求されます。
               </div>
+            </div>
+          )}
+
+          {/* ── Password Policy Card ── */}
+          {!loading && pp && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: t.radiusLg, padding: '24px', boxShadow: t.shadowSm, marginTop: 24 }}>
+              <h2 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontWeight: 600, color: t.text }}>パスワードポリシー</h2>
+
+              {ppError && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.75rem 1rem', borderRadius: t.radiusMd, marginBottom: 12, fontSize: '0.875rem' }}>{ppError}</div>}
+              {ppSuccess && <div style={{ background: '#dcfce7', color: '#15803d', padding: '0.75rem 1rem', borderRadius: t.radiusMd, marginBottom: 12, fontSize: '0.875rem' }}>{ppSuccess}</div>}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+                {([
+                  ['最小文字数', 'min_length', 4, 64],
+                  ['パスワード履歴数', 'password_history', 0, 24],
+                  ['有効期限（日）（0=無制限）', 'expire_days', 0, 365],
+                ] as [string, keyof PasswordPolicy, number, number][]).map(([label, key, min, max]) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: '0.875rem' }}>{label}</label>
+                    <input
+                      type="number"
+                      min={min} max={max}
+                      value={(pp[key] as number) ?? 0}
+                      onChange={e => setPp(prev => prev ? { ...prev, [key]: Number(e.target.value) } : prev)}
+                      style={{ width: '100%', padding: '8px 12px', border: `1px solid ${t.border}`, borderRadius: t.radiusMd, fontSize: '0.9rem', boxSizing: 'border-box' as const }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 20 }}>
+                {([
+                  ['大文字必須', 'require_uppercase'],
+                  ['数字必須', 'require_digits'],
+                  ['特殊文字必須', 'require_special'],
+                ] as [string, keyof PasswordPolicy][]).map(([label, key]) => (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{label}</span>
+                    <button
+                      role="switch" aria-checked={!!pp[key]}
+                      onClick={() => setPp(prev => prev ? { ...prev, [key]: !prev[key] } : prev)}
+                      style={{
+                        width: 44, height: 24, borderRadius: 12,
+                        background: pp[key] ? t.primary : '#cbd5e1',
+                        border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 200ms',
+                      }}
+                    >
+                      <span style={{ position: 'absolute', top: 2, left: pp[key] ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 200ms', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleSavePp}
+                disabled={ppSaving}
+                style={{ padding: '10px 24px', borderRadius: t.radiusMd, background: t.primary, color: '#fff', border: 'none', cursor: ppSaving ? 'not-allowed' : 'pointer', fontSize: '0.9rem', fontWeight: 600, opacity: ppSaving ? 0.6 : 1 }}
+              >
+                {ppSaving ? '保存中...' : '保存する'}
+              </button>
+            </div>
+          )}
+
+          {/* ── Session Settings Card ── */}
+          {!loading && ss && (
+            <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: t.radiusLg, padding: '24px', boxShadow: t.shadowSm, marginTop: 24, marginBottom: 32 }}>
+              <h2 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontWeight: 600, color: t.text }}>セッション設定</h2>
+
+              {ssError && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.75rem 1rem', borderRadius: t.radiusMd, marginBottom: 12, fontSize: '0.875rem' }}>{ssError}</div>}
+              {ssSuccess && <div style={{ background: '#dcfce7', color: '#15803d', padding: '0.75rem 1rem', borderRadius: t.radiusMd, marginBottom: 12, fontSize: '0.875rem' }}>{ssSuccess}</div>}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+                {([
+                  ['アクセストークン有効期間（秒）', 'access_token_lifespan', 60, 86400],
+                  ['SSOアイドルタイムアウト（秒）', 'sso_session_idle_timeout', 60, 86400 * 7],
+                  ['SSOセッション最大期間（秒）', 'sso_session_max_lifespan', 60, 86400 * 30],
+                ] as [string, keyof SessionSettings, number, number][]).map(([label, key, min, max]) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: '0.875rem' }}>{label}</label>
+                    <input
+                      type="number"
+                      min={min} max={max}
+                      value={(ss[key] as number) ?? 0}
+                      onChange={e => setSs(prev => prev ? { ...prev, [key]: Number(e.target.value) } : prev)}
+                      style={{ width: '100%', padding: '8px 12px', border: `1px solid ${t.border}`, borderRadius: t.radiusMd, fontSize: '0.9rem', boxSizing: 'border-box' as const }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleSaveSs}
+                disabled={ssSaving}
+                style={{ padding: '10px 24px', borderRadius: t.radiusMd, background: t.primary, color: '#fff', border: 'none', cursor: ssSaving ? 'not-allowed' : 'pointer', fontSize: '0.9rem', fontWeight: 600, opacity: ssSaving ? 0.6 : 1 }}
+              >
+                {ssSaving ? '保存中...' : '保存する'}
+              </button>
             </div>
           )}
         </main>

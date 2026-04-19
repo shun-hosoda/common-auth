@@ -30,6 +30,7 @@ from common_auth.models.auth_user import AuthUser
 from common_auth.models.group import BulkPermissionUpdateRequest
 from common_auth.services.group_service import GroupService
 from common_auth.services.permission_service import PermissionService
+from common_auth.services.audit_service import AuditService, AuditEntry
 from common_auth.services.db_client import DBClient
 from common_auth.services.keycloak_admin_client import KeycloakAdminClient
 
@@ -662,4 +663,273 @@ async def update_user_permissions(
         user_id=user_id,
         updates=payload.permissions,
         granted_by=uuid.UUID(user.sub),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FT-004  Password Policy
+# FT-005  Session Settings
+#
+# Both operate against Keycloak Realm Settings (not DB-backed).
+# Tenant resolution is used for access-control context and audit logging.
+# In single-realm setups all tenants share one Keycloak realm.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class PasswordPolicyResponse(BaseModel):
+    min_length: int
+    require_uppercase: bool
+    require_digits: bool
+    require_special: bool
+    password_history: int
+    expire_days: int
+
+
+class PasswordPolicyRequest(BaseModel):
+    min_length: int = 8
+    require_uppercase: bool = True
+    require_digits: bool = True
+    require_special: bool = False
+    password_history: int = 0
+    expire_days: int = 0
+
+
+class SessionSettingsResponse(BaseModel):
+    access_token_lifespan: int
+    sso_session_idle_timeout: int
+    sso_session_max_lifespan: int
+
+
+class SessionSettingsRequest(BaseModel):
+    access_token_lifespan: int         # seconds: 60-3600
+    sso_session_idle_timeout: int      # seconds: 300-86400
+    sso_session_max_lifespan: int      # seconds: 300-7776000 (90 days)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _parse_password_policy(policy_str: str) -> PasswordPolicyResponse:
+    """Parse Keycloak passwordPolicy string into structured response.
+
+    Keycloak stores password policy as a string like:
+        "length(8) and upperCase(1) and digits(1) and passwordHistory(3)"
+    """
+    import re
+
+    def _extract(pattern: str, default: int) -> int:
+        m = re.search(pattern, policy_str)
+        return int(m.group(1)) if m else default
+
+    min_length = _extract(r"length\((\d+)\)", 8)
+    uppercase_count = _extract(r"upperCase\((\d+)\)", 0)
+    digits_count = _extract(r"digits\((\d+)\)", 0)
+    special_count = _extract(r"specialChars\((\d+)\)", 0)
+    history = _extract(r"passwordHistory\((\d+)\)", 0)
+    expire_days = _extract(r"forceExpiredPasswordChange\((\d+)\)", 0)
+
+    return PasswordPolicyResponse(
+        min_length=min_length,
+        require_uppercase=uppercase_count > 0,
+        require_digits=digits_count > 0,
+        require_special=special_count > 0,
+        password_history=history,
+        expire_days=expire_days,
+    )
+
+
+def _build_password_policy(req: PasswordPolicyRequest) -> str:
+    """Build Keycloak passwordPolicy string from structured request."""
+    parts = [f"length({req.min_length})"]
+    if req.require_uppercase:
+        parts.append("upperCase(1)")
+    if req.require_digits:
+        parts.append("digits(1)")
+    if req.require_special:
+        parts.append("specialChars(1)")
+    if req.password_history > 0:
+        parts.append(f"passwordHistory({req.password_history})")
+    if req.expire_days > 0:
+        parts.append(f"forceExpiredPasswordChange({req.expire_days})")
+    return " and ".join(parts)
+
+
+def _maybe_audit(
+    request: Request,
+    tenant_id: str,
+    user: AuthUser,
+    action: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Fire-and-forget audit write if DB is configured, otherwise skip."""
+    if not hasattr(request.app.state, "db"):
+        return
+    svc = AuditService(request.app.state.db)
+    svc.log(
+        tenant_id=tenant_id,
+        actor_id=user.sub,
+        actor_email=user.email,
+        action=action,
+        details=details or {},
+    )
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/security/password-policy", response_model=PasswordPolicyResponse, tags=["security"])
+async def get_password_policy(
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> PasswordPolicyResponse:
+    """Return the current Keycloak password policy for the realm.
+
+    Tenant resolution:
+        - super_admin: ``tenant_id`` query param is required.
+        - tenant_admin: ``tenant_id`` is optional; JWT tenant is used.
+    """
+    _require_admin(user)
+    _resolve_db_tenant(user, tenant_id)  # enforces super_admin tenant_id rule
+    kc = _get_kc_admin(request)
+    realm = await kc.get_realm_settings()
+    policy_str: str = realm.get("passwordPolicy", "")
+    return _parse_password_policy(policy_str)
+
+
+@router.put("/security/password-policy", response_model=PasswordPolicyResponse, tags=["security"])
+async def update_password_policy(
+    payload: PasswordPolicyRequest,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> PasswordPolicyResponse:
+    """Update the Keycloak password policy for the realm.
+
+    Validations:
+        - min_length: 1-128
+        - password_history: 0-24
+        - expire_days: 0-365
+
+    Tenant resolution:
+        - super_admin: ``tenant_id`` query param is required.
+        - tenant_admin: ``tenant_id`` is optional; JWT tenant is used.
+    """
+    if not (1 <= payload.min_length <= 128):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="min_length must be between 1 and 128",
+        )
+    if not (0 <= payload.password_history <= 24):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="password_history must be between 0 and 24",
+        )
+    if not (0 <= payload.expire_days <= 365):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="expire_days must be between 0 and 365",
+        )
+
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    kc = _get_kc_admin(request)
+    policy_str = _build_password_policy(payload)
+    await kc.update_realm_settings({"passwordPolicy": policy_str})
+    logger.info(
+        "Password policy updated",
+        extra={"tenant_id": resolved_tenant_id, "actor": user.email, "policy": policy_str},
+    )
+    _maybe_audit(
+        request, resolved_tenant_id, user,
+        "security.password_policy.update",
+        {"policy": policy_str},
+    )
+    return _parse_password_policy(policy_str)
+
+
+@router.get("/security/session", response_model=SessionSettingsResponse, tags=["security"])
+async def get_session_settings(
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> SessionSettingsResponse:
+    """Return the current Keycloak session timeout settings for the realm.
+
+    Tenant resolution:
+        - super_admin: ``tenant_id`` query param is required.
+        - tenant_admin: ``tenant_id`` is optional; JWT tenant is used.
+    """
+    _require_admin(user)
+    _resolve_db_tenant(user, tenant_id)
+    kc = _get_kc_admin(request)
+    realm = await kc.get_realm_settings()
+    return SessionSettingsResponse(
+        access_token_lifespan=realm.get("accessTokenLifespan", 300),
+        sso_session_idle_timeout=realm.get("ssoSessionIdleTimeout", 1800),
+        sso_session_max_lifespan=realm.get("ssoSessionMaxLifespan", 36000),
+    )
+
+
+@router.put("/security/session", response_model=SessionSettingsResponse, tags=["security"])
+async def update_session_settings(
+    payload: SessionSettingsRequest,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> SessionSettingsResponse:
+    """Update the Keycloak session timeout settings for the realm.
+
+    Validations:
+        - access_token_lifespan: 60-3600 seconds
+        - sso_session_idle_timeout: 300-86400 seconds
+        - sso_session_max_lifespan: 300-7776000 seconds (up to 90 days)
+
+    Tenant resolution:
+        - super_admin: ``tenant_id`` query param is required.
+        - tenant_admin: ``tenant_id`` is optional; JWT tenant is used.
+    """
+    if not (60 <= payload.access_token_lifespan <= 3600):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="access_token_lifespan must be between 60 and 3600 seconds",
+        )
+    if not (300 <= payload.sso_session_idle_timeout <= 86400):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="sso_session_idle_timeout must be between 300 and 86400 seconds",
+        )
+    if not (300 <= payload.sso_session_max_lifespan <= 7776000):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="sso_session_max_lifespan must be between 300 and 7776000 seconds",
+        )
+
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    kc = _get_kc_admin(request)
+    await kc.update_realm_settings({
+        "accessTokenLifespan": payload.access_token_lifespan,
+        "ssoSessionIdleTimeout": payload.sso_session_idle_timeout,
+        "ssoSessionMaxLifespan": payload.sso_session_max_lifespan,
+    })
+    logger.info(
+        "Session settings updated",
+        extra={"tenant_id": resolved_tenant_id, "actor": user.email},
+    )
+    _maybe_audit(
+        request, resolved_tenant_id, user,
+        "security.session.update",
+        {
+            "access_token_lifespan": payload.access_token_lifespan,
+            "sso_session_idle_timeout": payload.sso_session_idle_timeout,
+            "sso_session_max_lifespan": payload.sso_session_max_lifespan,
+        },
+    )
+    return SessionSettingsResponse(
+        access_token_lifespan=payload.access_token_lifespan,
+        sso_session_idle_timeout=payload.sso_session_idle_timeout,
+        sso_session_max_lifespan=payload.sso_session_max_lifespan,
     )

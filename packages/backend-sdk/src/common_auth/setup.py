@@ -12,6 +12,7 @@ from common_auth.middleware.tenant import TenantMiddleware
 from common_auth.middleware.rate_limit import RateLimitMiddleware, RateLimitStore
 from common_auth.routers.auth import router as auth_router
 from common_auth.routers.admin import router as admin_router
+from common_auth.routers.audit import router as audit_router
 from common_auth.routers.groups import router as groups_router
 from common_auth.routers.invitation import router as invitation_router
 from common_auth.services.email_service import EmailService
@@ -112,6 +113,7 @@ def setup_auth(
     # Mount groups/permissions router (requires DB pool)
     if _resolved_dsn:
         app.include_router(groups_router, prefix="/api/admin", tags=["groups"])
+        app.include_router(audit_router, prefix="/api/admin", tags=["audit"])
 
     # Mount invitation router (Public endpoints + admin invitation management)
     # /api/invitations/validate and /api/invitations/accept are JWT-excluded

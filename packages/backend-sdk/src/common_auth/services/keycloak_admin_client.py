@@ -415,3 +415,29 @@ class KeycloakAdminClient:
         resp.raise_for_status()
         location = resp.headers.get("Location", "")
         return location.split("/")[-1]
+
+    # ── Realm settings (FT-004 / FT-005) ─────────────────────────────────────
+
+    async def get_realm_settings(self) -> dict[str, Any]:
+        """Return the current Realm Representation from Keycloak Admin API.
+
+        Callers should extract only the fields they care about (e.g.
+        ``passwordPolicy``, ``accessTokenLifespan``) to avoid accidentally
+        overwriting unrelated realm settings on PUT.
+        """
+        resp = await self._request("GET", "")
+        resp.raise_for_status()
+        return dict(resp.json())
+
+    async def update_realm_settings(self, payload: dict[str, Any]) -> None:
+        """Partial-update realm settings via HTTP PUT.
+
+        Only the keys present in *payload* are sent to Keycloak.  Keycloak
+        performs a full merge on PUT so callers should pass only the fields
+        they intend to change (e.g. ``{"passwordPolicy": "..."}``).
+
+        Args:
+            payload: A dict of Realm Representation fields to update.
+        """
+        resp = await self._request("PUT", "", json=payload)
+        resp.raise_for_status()

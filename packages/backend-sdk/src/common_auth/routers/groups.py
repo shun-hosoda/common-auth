@@ -21,6 +21,7 @@ User-side group/permission endpoints are in admin.py:
   PUT    /admin/users/{user_id}/permissions
 """
 
+import asyncio
 import uuid
 import logging
 from typing import Any, Optional
@@ -40,6 +41,7 @@ from common_auth.models.group import (
     MembersListResponse,
     PermissionsListResponse,
 )
+from common_auth.services.audit_service import AuditService
 from common_auth.services.db_client import DBClient
 from common_auth.services.group_service import GroupService
 from common_auth.services.permission_service import PermissionService
@@ -75,6 +77,33 @@ def _resolve_tenant(user: AuthUser, target_tenant: Optional[str] = None) -> str:
             detail="tenant_id not found in token",
         )
     return user.tenant_id
+
+
+# ── Audit helper ──────────────────────────────────────────────────────────────
+
+
+def _maybe_audit(
+    request: Request,
+    tenant_id: str,
+    user: AuthUser,
+    action: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Fire-and-forget audit write if DB is configured, otherwise skip."""
+    if not hasattr(request.app.state, "db"):
+        return
+    svc = AuditService(request.app.state.db)
+    svc.log(
+        tenant_id=tenant_id,
+        actor_id=user.sub,
+        actor_email=user.email,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details=details or {},
+    )
 
 
 # ── Group CRUD ────────────────────────────────────────────────────────────────
@@ -114,6 +143,13 @@ async def create_group(
     group_svc, _ = _get_services(request)
 
     row = await group_svc.create_group(tenant_id=tenant_id, payload=payload)
+    _maybe_audit(
+        request, tenant_id, user,
+        "group.create",
+        resource_type="group",
+        resource_id=str(row["id"]),
+        details={"name": row.get("name")},
+    )
     return GroupResponse(**row)
 
 
@@ -149,6 +185,12 @@ async def update_group(
     )
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    _maybe_audit(
+        request, tenant_id, user,
+        "group.update",
+        resource_type="group",
+        resource_id=str(group_id),
+    )
     return GroupResponse(**row)
 
 
@@ -165,6 +207,12 @@ async def delete_group(
     deleted = await group_svc.delete_group(tenant_id=tenant_id, group_id=group_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+    _maybe_audit(
+        request, tenant_id, user,
+        "group.delete",
+        resource_type="group",
+        resource_id=str(group_id),
+    )
 
 
 # ── Members ───────────────────────────────────────────────────────────────────
@@ -201,6 +249,13 @@ async def add_members(
         user_ids=payload.user_ids,
         added_by=uuid.UUID(user.sub),
     )
+    _maybe_audit(
+        request, tenant_id, user,
+        "group.member.add",
+        resource_type="group",
+        resource_id=str(group_id),
+        details={"user_ids": [str(uid) for uid in payload.user_ids]},
+    )
 
 
 @router.delete(
@@ -223,6 +278,13 @@ async def remove_member(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
+    _maybe_audit(
+        request, tenant_id, user,
+        "group.member.remove",
+        resource_type="group",
+        resource_id=str(group_id),
+        details={"user_id": str(user_id)},
+    )
 
 
 # ── Group Permissions ─────────────────────────────────────────────────────────
@@ -262,6 +324,12 @@ async def update_group_permissions(
         group_id=group_id,
         updates=payload.permissions,
         granted_by=uuid.UUID(user.sub),
+    )
+    _maybe_audit(
+        request, tenant_id, user,
+        "group.permission.update",
+        resource_type="group",
+        resource_id=str(group_id),
     )
 
 

@@ -9,6 +9,8 @@ import SecuritySettings from './pages/SecuritySettings'
 import PersonalSecuritySettings from './pages/PersonalSecuritySettings'
 import AdminInvitations from './pages/AdminInvitations'
 import InviteAccept from './pages/InviteAccept'
+import AdminGroups from './pages/AdminGroups'
+import AuditLogs from './pages/AuditLogs'
 
 const ADMIN_UNAUTHORIZED = (
   <div className="container">
@@ -51,6 +53,24 @@ function App() {
           unauthorizedFallback={ADMIN_UNAUTHORIZED}
         >
           <AdminInvitations />
+        </AuthGuard>
+      } />
+      <Route path="/admin/groups" element={
+        <AuthGuard
+          fallback={<div className="loading">Loading...</div>}
+          requiredRoles={['tenant_admin', 'super_admin']}
+          unauthorizedFallback={ADMIN_UNAUTHORIZED}
+        >
+          <AdminGroups />
+        </AuthGuard>
+      } />
+      <Route path="/admin/audit" element={
+        <AuthGuard
+          fallback={<div className="loading">Loading...</div>}
+          requiredRoles={['tenant_admin', 'super_admin']}
+          unauthorizedFallback={ADMIN_UNAUTHORIZED}
+        >
+          <AuditLogs />
         </AuthGuard>
       } />
       <Route path="/security" element={
