@@ -129,9 +129,10 @@ class AuditService:
                 except ValueError:
                     pass  # keep None if actor_id is not a valid UUID
 
-            tenant_uuid = uuid.UUID(entry.tenant_id)
+            resolved_tenant = await self._db.resolve_tenant_uuid(entry.tenant_id)
+            tenant_uuid = uuid.UUID(resolved_tenant)
 
-            async with self._db.connection(tenant_id=entry.tenant_id) as conn:
+            async with self._db.connection(tenant_id=resolved_tenant) as conn:
                 await conn.execute(
                     _INSERT_SQL,
                     tenant_uuid,
@@ -185,6 +186,8 @@ class AuditService:
         """
         per_page = min(per_page, 200)
         offset = (page - 1) * per_page
+
+        tenant_id = await self._db.resolve_tenant_uuid(tenant_id)
 
         conditions: list[str] = ["tenant_id = $1"]
         params: list[Any] = [uuid.UUID(tenant_id)]

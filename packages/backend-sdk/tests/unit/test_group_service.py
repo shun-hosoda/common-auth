@@ -50,6 +50,7 @@ def _mock_db(conn):
     db.connection = MagicMock()
     db.connection.return_value.__aenter__ = AsyncMock(return_value=conn)
     db.connection.return_value.__aexit__ = AsyncMock(return_value=False)
+    db.resolve_tenant_uuid = AsyncMock(side_effect=lambda tenant_id: tenant_id)
     return db
 
 

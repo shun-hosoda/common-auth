@@ -19,6 +19,7 @@ import asyncpg
 
 from common_auth import AuthConfig, setup_auth, get_current_user, get_optional_user, AuthUser
 from common_auth.services.keycloak_admin_client import KeycloakAdminClient
+from common_auth.services.db_client import DBClient
 
 # Configure logging
 logging.basicConfig(
@@ -66,6 +67,9 @@ async def lifespan(app: FastAPI):
         if pool is not None:
             app.state.db_pool = pool
             logger.info(f"App DB pool created: {db_url.split('@')[-1]}")
+            # DBClient for groups/audit routers (uses app.state.db)
+            app.state.db = await DBClient.create(db_url)
+            logger.info("DBClient pool created for admin routers")
         else:
             logger.warning(
                 "App DB connection failed after retries (user-groups endpoint disabled): %s",
@@ -95,6 +99,8 @@ async def lifespan(app: FastAPI):
 
     if getattr(app.state, "db_pool", None):
         await app.state.db_pool.close()
+    if getattr(app.state, "db", None):
+        await app.state.db.close()
     logger.info("Shutting down example FastAPI app")
 
 
@@ -109,7 +115,7 @@ app = FastAPI(
 # Setup authentication
 try:
     config = AuthConfig.from_env()
-    setup_auth(app, config)
+    setup_auth(app, config, db_dsn=os.environ.get("APP_DATABASE_URL"))
     logger.info(f"Authentication configured for realm: {config.keycloak_realm}")
 except Exception as e:
     logger.error(f"Failed to configure authentication: {e}")

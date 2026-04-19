@@ -22,6 +22,10 @@ class PermissionService:
     def __init__(self, db: DBClient) -> None:
         self._db = db
 
+    async def _rt(self, tenant_id: str) -> str:
+        """Resolve tenant slug → UUID."""
+        return await self._db.resolve_tenant_uuid(tenant_id)
+
     # ── Permission master ─────────────────────────────────────────────────────
 
     async def list_permissions(
@@ -31,6 +35,7 @@ class PermissionService:
 
         Includes system permissions (tenant_id IS NULL) and tenant-custom ones.
         """
+        tenant_id = await self._rt(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             rows = await conn.fetch(
                 """
@@ -54,6 +59,7 @@ class PermissionService:
         granted = False → group_permissions record has granted=false (explicit deny)
         granted = None  → no record (default deny)
         """
+        tenant_id = await self._rt(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             rows = await conn.fetch(
                 """
@@ -83,6 +89,7 @@ class PermissionService:
         - granted=True/False  → UPSERT into group_permissions
         - granted=None        → DELETE from group_permissions (reset to default deny)
         """
+        tenant_id = await self._rt(tenant_id)
         upserts = [u for u in updates if u.granted is not None]
         deletes = [u for u in updates if u.granted is None]
 
@@ -131,6 +138,7 @@ class PermissionService:
         - granted=True/False  → UPSERT into user_permissions
         - granted=None        → DELETE (revert to group-inherited)
         """
+        tenant_id = await self._rt(tenant_id)
         upserts = [u for u in updates if u.granted is not None]
         deletes = [u for u in updates if u.granted is None]
 
@@ -174,6 +182,7 @@ class PermissionService:
         Uses the CTE from docs/design/user-group-permission.md.
         Returns list of {id, resource, action, granted, source}.
         """
+        tenant_id = await self._rt(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             rows = await conn.fetch(
                 """
@@ -230,6 +239,7 @@ class PermissionService:
         self, *, tenant_id: str, user_id: uuid.UUID
     ) -> list[dict[str, Any]]:
         """List permissions with current granted status for a user (direct only)."""
+        tenant_id = await self._rt(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             rows = await conn.fetch(
                 """

@@ -30,6 +30,7 @@ def mock_db() -> MagicMock:
         yield conn
 
     db.connection = _connection
+    db.resolve_tenant_uuid = AsyncMock(side_effect=lambda tid: tid)
     return db
 
 

@@ -62,6 +62,31 @@ class DBClient:
         """Gracefully terminate the connection pool."""
         await self._pool.close()
 
+    async def resolve_tenant_uuid(self, tenant_id: str) -> str:
+        """Resolve a tenant realm_name slug to its UUID.
+
+        If *tenant_id* is already a valid UUID string it is returned as-is.
+        Otherwise queries ``tenants.id`` by ``realm_name``.
+
+        Raises:
+            ValueError: if the tenant is not found or is inactive.
+        """
+        import uuid as _uuid_mod
+        try:
+            _uuid_mod.UUID(tenant_id)
+            return tenant_id  # already a valid UUID
+        except ValueError:
+            pass  # fall through to DB lookup
+
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id FROM tenants WHERE realm_name = $1 AND is_active = true",
+                tenant_id,
+            )
+        if not row:
+            raise ValueError(f"Tenant not found: {tenant_id!r}")
+        return str(row["id"])
+
     # ── Connection context manager ────────────────────────────────────────────
 
     @asynccontextmanager
