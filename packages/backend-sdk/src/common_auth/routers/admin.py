@@ -16,6 +16,7 @@ Environment variables required:
 import asyncio
 import os
 import logging
+import uuid
 from typing import cast
 from typing import Any, Literal
 
@@ -26,6 +27,10 @@ from pydantic import BaseModel
 
 from common_auth.dependencies.current_user import get_current_user
 from common_auth.models.auth_user import AuthUser
+from common_auth.models.group import BulkPermissionUpdateRequest
+from common_auth.services.group_service import GroupService
+from common_auth.services.permission_service import PermissionService
+from common_auth.services.db_client import DBClient
 from common_auth.services.keycloak_admin_client import KeycloakAdminClient
 
 logger = logging.getLogger(__name__)
@@ -130,6 +135,10 @@ class CreateClientBody(BaseModel):
 class MfaSettingsBody(BaseModel):
     mfa_enabled: bool
     mfa_method: Literal["totp", "email"] = "totp"
+
+
+class AddUserToGroupBody(BaseModel):
+    group_id: uuid.UUID
 
 
 # ── User endpoints ────────────────────────────────────────────────────────────
@@ -524,3 +533,133 @@ async def create_client(
     }
     new_id = await kc.create_client(payload)
     return {"id": new_id}
+
+
+# ── User ↔ Group / Permission endpoints ──────────────────────────────────────
+# These endpoints require the DB pool (app.state.db) to be initialised via
+# setup_auth(..., db_dsn=...).
+
+
+def _resolve_db_tenant(user: AuthUser, target_tenant: str | None = None) -> str:
+    if "super_admin" in user.roles:
+        if target_tenant:
+            return target_tenant
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="super_admin must specify tenant_id for DB-backed endpoints",
+        )
+
+    if not user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tenant_id not found in token",
+        )
+    return user.tenant_id
+
+
+def _get_db_services(request: Request) -> tuple[GroupService, PermissionService]:
+    """Return (GroupService, PermissionService) or raise 503 if DB not configured."""
+    if not hasattr(request.app.state, "db"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Group/Permission API requires DATABASE_URL to be configured",
+        )
+
+    db: DBClient = request.app.state.db
+    return GroupService(db), PermissionService(db)
+
+
+@router.get("/users/{user_id}/groups", tags=["admin"])
+async def list_user_groups(
+    user_id: uuid.UUID,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, list[dict[str, Any]]]:
+    """Return all groups the target user belongs to."""
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    group_svc, _ = _get_db_services(request)
+    items = await group_svc.list_user_groups(
+        tenant_id=resolved_tenant_id, user_id=user_id
+    )
+    return {"groups": items}
+
+
+@router.post("/users/{user_id}/groups", status_code=204, tags=["admin"])
+async def add_user_to_group(
+    user_id: uuid.UUID,
+    body: AddUserToGroupBody,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> None:
+    """Add user to a group. Body: {group_id: uuid}"""
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    group_id = body.group_id
+    group_svc, _ = _get_db_services(request)
+    await group_svc.add_user_to_group(
+        tenant_id=resolved_tenant_id,
+        user_id=user_id,
+        group_id=group_id,
+        added_by=uuid.UUID(user.sub),
+    )
+
+
+@router.delete("/users/{user_id}/groups/{group_id}", status_code=204, tags=["admin"])
+async def remove_user_from_group(
+    user_id: uuid.UUID,
+    group_id: uuid.UUID,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> None:
+    """Remove user from a group."""
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    group_svc, _ = _get_db_services(request)
+    removed = await group_svc.remove_user_from_group(
+        tenant_id=resolved_tenant_id, user_id=user_id, group_id=group_id
+    )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found"
+        )
+
+
+@router.get("/users/{user_id}/permissions", tags=["admin"])
+async def list_user_permissions(
+    user_id: uuid.UUID,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, list[dict[str, Any]]]:
+    """Return effective permissions for a user (resolved group + direct)."""
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    _, perm_svc = _get_db_services(request)
+    items = await perm_svc.get_effective_permissions(
+        tenant_id=resolved_tenant_id, user_id=user_id
+    )
+    return {"permissions": items}
+
+
+@router.put("/users/{user_id}/permissions", status_code=204, tags=["admin"])
+async def update_user_permissions(
+    user_id: uuid.UUID,
+    payload: BulkPermissionUpdateRequest,
+    request: Request,
+    tenant_id: str | None = None,
+    user: AuthUser = Depends(get_current_user),
+) -> None:
+    """Bulk-update user direct permission overrides."""
+    _require_admin(user)
+    resolved_tenant_id = _resolve_db_tenant(user, tenant_id)
+    _, perm_svc = _get_db_services(request)
+    await perm_svc.update_user_permissions(
+        tenant_id=resolved_tenant_id,
+        user_id=user_id,
+        updates=payload.permissions,
+        granted_by=uuid.UUID(user.sub),
+    )
