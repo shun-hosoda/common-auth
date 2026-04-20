@@ -372,12 +372,11 @@ export interface GroupMember {
   user_id: string
   email: string
   display_name: string | null
-  added_at: string
+  joined_at: string
 }
 
 export interface GroupMembersResponse {
-  group_id: string
-  members: GroupMember[]
+  items: GroupMember[]
   total: number
 }
 

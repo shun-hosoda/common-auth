@@ -162,7 +162,7 @@ function MembersModal({
   const fetchMembers = useCallback(async () => {
     try {
       const res = await listGroupMembers(token, group.id)
-      setMembers(res.members)
+      setMembers(res.items)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'メンバー取得に失敗しました')
     } finally {
@@ -245,7 +245,7 @@ function MembersModal({
                       {m.display_name ?? '—'}
                     </td>
                     <td style={{ padding: '8px 4px', fontSize: '0.8rem', color: t.textMuted }}>
-                      {new Date(m.added_at).toLocaleDateString('ja-JP')}
+                      {new Date(m.joined_at).toLocaleDateString('ja-JP')}
                     </td>
                     <td style={{ padding: '8px 4px', textAlign: 'right' }}>
                       <button
@@ -447,7 +447,7 @@ export default function AdminGroups() {
           <SideNav items={navItems} currentPath="/admin/groups" onNavigate={navigate} />
         )}
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 900 }}>
+        <main style={{ flex: 1, minWidth: 0, padding: '2rem' }}>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
             <div>

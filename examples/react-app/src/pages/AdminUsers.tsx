@@ -28,6 +28,7 @@ import {
 } from '../components/layout'
 import {
   MdHome, MdPeople, MdLock, MdBusiness, MdManageAccounts, MdLogout, MdSecurity,
+  MdGroup, MdHistory,
 } from 'react-icons/md'
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -567,8 +568,12 @@ export default function AdminUsers() {
   // ─── render ────────────────────────────────────────────────────────────────
   const navItems: NavItem[] = [
     { label: 'ダッシュボード', icon: <MdHome />, path: '/dashboard' },
-    ...(isAdmin      ? [{ label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' }] : []),
-    ...(isAdmin      ? [{ label: 'セキュリティ設定', icon: <MdLock />, path: '/security' }] : []),
+    ...(isAdmin      ? [
+      { label: 'ユーザー管理', icon: <MdPeople />, path: '/admin/users' },
+      { label: 'グループ管理', icon: <MdGroup />, path: '/admin/groups' },
+      { label: '監査ログ', icon: <MdHistory />, path: '/admin/audit' },
+      { label: 'セキュリティ設定', icon: <MdLock />, path: '/security' },
+    ] : []),
     ...(isSuperAdmin ? [{ label: 'テナント管理', icon: <MdBusiness />, path: '/admin/clients' }] : []),
   ]
 

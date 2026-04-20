@@ -1,4 +1,4 @@
-"""Group service — tenant_groups CRUD and user_group_memberships management.
+"""Group service  Etenant_groups CRUD and user_group_memberships management.
 
 All queries are tenant-scoped via DBClient.connection(tenant_id=...) which
 applies PostgreSQL RLS automatically.
@@ -17,8 +17,8 @@ class GroupService:
     def __init__(self, db: DBClient) -> None:
         self._db = db
 
-    async def _rt(self, tenant_id: str) -> str:
-        """Resolve tenant slug → UUID (pass-through if already a UUID)."""
+    async def _resolve_tenant(self, tenant_id: str) -> str:
+        """Resolve tenant slug ↁEUUID (pass-through if already a UUID)."""
         return await self._db.resolve_tenant_uuid(tenant_id)
 
     @staticmethod
@@ -39,7 +39,7 @@ class GroupService:
         search: Optional[str] = None,
     ) -> dict[str, Any]:
         """Return paginated list of active groups for the tenant."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         offset = (page - 1) * page_size
 
         async with self._db.connection(tenant_id=tenant_id) as conn:
@@ -103,7 +103,7 @@ class GroupService:
         self, *, tenant_id: str, group_id: uuid.UUID
     ) -> Optional[dict[str, Any]]:
         """Return a single group or None if not found."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             row = await conn.fetchrow(
                 """
@@ -122,7 +122,7 @@ class GroupService:
         self, *, tenant_id: str, payload: GroupCreate
     ) -> dict[str, Any]:
         """Insert a new group and return the created record."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             row = await conn.fetchrow(
                 """
@@ -149,7 +149,7 @@ class GroupService:
         payload: GroupUpdate,
     ) -> Optional[dict[str, Any]]:
         """Update fields on an existing group. Returns None if not found."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         updates = payload.model_dump(exclude_none=True)
         if not updates:
             return await self.get_group(tenant_id=tenant_id, group_id=group_id)
@@ -178,7 +178,7 @@ class GroupService:
         self, *, tenant_id: str, group_id: uuid.UUID
     ) -> bool:
         """Logical delete: set is_active=false, orphan child groups to root."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             # Orphan children
             await conn.execute(
@@ -210,7 +210,7 @@ class GroupService:
         self, *, tenant_id: str, group_id: uuid.UUID
     ) -> dict[str, Any]:
         """Return members of a group with their profile info."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             count = await conn.fetchval(
                 "SELECT COUNT(*) FROM user_group_memberships WHERE group_id = $1",
@@ -240,7 +240,7 @@ class GroupService:
         added_by: uuid.UUID,
     ) -> None:
         """Bulk-insert user_group_memberships. Ignores duplicate entries."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         records = [(group_id, uid, added_by) for uid in user_ids]
         async with self._db.connection(tenant_id=tenant_id) as conn:
             await conn.executemany(
@@ -256,7 +256,7 @@ class GroupService:
         self, *, tenant_id: str, group_id: uuid.UUID, user_id: uuid.UUID
     ) -> bool:
         """Remove a user from a group. Returns True if the row existed."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             result = await conn.execute(
                 """
@@ -268,13 +268,13 @@ class GroupService:
             )
         return str(result).endswith("1")
 
-    # ── User ↔ Group (user-side operations) ──────────────────────────────────
+    # ── User ↁEGroup (user-side operations) ──────────────────────────────────
 
     async def list_user_groups(
         self, *, tenant_id: str, user_id: uuid.UUID
     ) -> list[dict[str, Any]]:
         """Return all groups a user belongs to."""
-        tenant_id = await self._rt(tenant_id)
+        tenant_id = await self._resolve_tenant(tenant_id)
         async with self._db.connection(tenant_id=tenant_id) as conn:
             rows = await conn.fetch(
                 """

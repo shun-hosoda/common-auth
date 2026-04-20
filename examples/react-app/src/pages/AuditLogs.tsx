@@ -183,7 +183,7 @@ export default function AuditLogs() {
           <SideNav items={navItems} currentPath="/admin/audit" onNavigate={navigate} />
         )}
 
-        <main style={{ flex: 1, padding: '2rem', maxWidth: 1000 }}>
+        <main style={{ flex: 1, minWidth: 0, padding: '2rem' }}>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
             <div>

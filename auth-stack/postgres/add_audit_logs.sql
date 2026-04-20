@@ -14,10 +14,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id_created ON audit_logs(tenant_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_action            ON audit_logs(tenant_id, action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_action     ON audit_logs(tenant_id, action);
 
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenant_isolation_policy ON audit_logs;
+-- current_tenant_id が未設定の場合は NULLIF により NULL となり全行非表示（安全側フォールバック）
 CREATE POLICY tenant_isolation_policy ON audit_logs
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::UUID);
