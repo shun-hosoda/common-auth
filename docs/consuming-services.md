@@ -2,33 +2,27 @@
 
 このドキュメントは `common-auth` を利用する新規サービスの開発者向けです。
 
----
+## 構成方針
 
-## 1. 事前準備: GitHub Personal Access Token (PAT) の取得
-
-GitHub Packages からパッケージをインストールするために PAT が必要です。
-
-1. GitHub → Settings → Developer settings → Personal access tokens → **Tokens (fine-grained)**
-2. 必要な権限: `read:packages`
-3. 取得したトークンを安全な場所に保管する
+| レイヤー | 方針 |
+|---------|------|
+| **バックエンド (Python)** | `common-auth` パッケージを GitHub Releases から pip install |
+| **フロントエンド** | 各サービスで独自実装。`examples/react-app` をベースにコピーして改造するのが最速 |
 
 ---
 
-## 2. Python サービス（FastAPI）での利用
+## 1. バックエンド (Python / FastAPI)
 
 ### インストール
 
-```bash
-# requirements.txt または pyproject.toml に追記
-# GitHub Releases から直接 wheel をインストール
+GitHub Releases の wheel を直接インストールします（PyPI 不要）。
 
-pip install "common-auth @ https://github.com/shun-hosoda/common-auth/releases/download/v1.0.0/common_auth-1.0.0-py3-none-any.whl"
+**requirements.txt:**
+```
+common-auth @ https://github.com/shun-hosoda/common-auth/releases/download/v1.0.0/common_auth-1.0.0-py3-none-any.whl
 ```
 
-> `ORG/REPO` は実際のリポジトリパスに置き換えてください。
-
-#### pyproject.toml に固定する場合
-
+**pyproject.toml:**
 ```toml
 [project]
 dependencies = [
@@ -36,13 +30,9 @@ dependencies = [
 ]
 ```
 
-#### requirements.txt に固定する場合
+リリース一覧: https://github.com/shun-hosoda/common-auth/releases
 
-```
-common-auth @ https://github.com/shun-hosoda/common-auth/releases/download/v1.0.0/common_auth-1.0.0-py3-none-any.whl
-```
-
-### 最小実装 (FastAPI)
+### 最小実装
 
 ```python
 # main.py
@@ -55,10 +45,18 @@ app = FastAPI()
 config = AuthConfig.from_env()
 setup_auth(app, config, db_dsn=os.environ.get("APP_DATABASE_URL"))
 
-@app.get("/api/private")
-async def private(user: AuthUser = Depends(get_current_user)):
-    return {"user": user.email, "tenant": user.tenant_id}
+@app.get("/api/protected")
+async def protected(user: AuthUser = Depends(get_current_user)):
+    return {"user": user.email, "tenant": user.tenant_id, "roles": user.roles}
 ```
+
+`setup_auth` を呼ぶだけで以下が自動登録されます:
+- `GET /auth/health` — ヘルスチェック（認証不要）
+- `GET /auth/me` — ログインユーザー情報
+- `GET /api/admin/users` — テナントユーザー一覧（tenant_admin 必要）
+- `GET /api/admin/groups` — グループ管理
+- `GET /api/admin/audit/logs` — 監査ログ
+- `GET /api/admin/security/mfa` — MFA ポリシー管理
 
 ### 必要な環境変数 (.env)
 
@@ -67,97 +65,76 @@ KEYCLOAK_URL=http://localhost:8080
 KEYCLOAK_REALM=common-auth
 KEYCLOAK_CLIENT_ID=your-service-client
 KC_ADMIN_CLIENT_ID=admin-api-client
-KC_ADMIN_CLIENT_SECRET=your-secret
-APP_DATABASE_URL=postgresql://user:pass@localhost:5433/app_db  # グループ機能を使う場合
+KC_ADMIN_CLIENT_SECRET=your-admin-client-secret
+APP_DATABASE_URL=postgresql://user:pass@localhost:5433/app_db  # グループ機能を使う場合のみ
+```
+
+### バージョンアップ
+
+```
+# requirements.txt の URL バージョン番号を更新して再インストール
+pip install "common-auth @ https://github.com/shun-hosoda/common-auth/releases/download/v1.0.1/common_auth-1.0.1-py3-none-any.whl"
 ```
 
 ---
 
-## 3. TypeScript/React サービスでの利用
+## 2. フロントエンド (React / TypeScript)
 
-### GitHub Packages npm registry の設定
+フロントは各サービスで独自実装します。
+`examples/react-app` が完全なサンプルとして機能するので、コピーして改造するのが最速です。
 
-プロジェクトルートに `.npmrc` を作成：
-
-```
-@common-auth:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
-
-環境変数を設定：
+### react-app をベースにする場合
 
 ```bash
-# Windows PowerShell
-$env:GITHUB_TOKEN = "ghp_xxxxxxxxxxxx"  # あなたの PAT
+# common-auth リポジトリから react-app をコピー
+cp -r common-auth/examples/react-app my-new-service/frontend
 
-# .env ファイル (gitignore に追加すること)
-GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+cd my-new-service/frontend
+npm install
 ```
 
-### インストール
+**変更が必要な箇所:**
 
-```bash
-npm install @common-auth/react@1.0.0
-```
+| ファイル | 変更内容 |
+|---------|---------|
+| `.env` | `VITE_KEYCLOAK_URL`, `VITE_CLIENT_ID` をサービスに合わせて変更 |
+| `src/pages/` | 不要な管理画面を削除、サービス固有の画面を追加 |
+| `src/api/` | バックエンドの API エンドポイントを変更 |
 
-### 最小実装 (React)
+**そのまま使える認証ロジック:**
+- `src/auth/` — OIDC 設定・コールバック処理
+- `src/hooks/useAuth.ts` — ログイン/ログアウト/トークン管理
+- `src/components/AuthGuard.tsx` — 認証必須ルートの保護
+
+### 認証の基本パターン（コピー可）
 
 ```tsx
-// main.tsx
-import { AuthProvider } from '@common-auth/react'
+// ログインユーザー情報の取得
+import { useAuth } from '../hooks/useAuth'
 
-const authConfig = {
-  authority: 'http://localhost:8080/realms/common-auth',
-  client_id: 'your-service-client',
-  redirect_uri: `${window.location.origin}/callback`,
-}
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <AuthProvider config={authConfig}>
-    <App />
-  </AuthProvider>
-)
-```
-
-```tsx
-// 保護されたコンポーネント
-import { useAuth, AuthGuard } from '@common-auth/react'
-
-function Dashboard() {
-  const { user } = useAuth()
-  return <div>こんにちは {user?.profile.email}</div>
-}
-
-// 認証必須ページ
-export default function ProtectedPage() {
+export function MyPage() {
+  const { user, accessToken, logout } = useAuth()
   return (
-    <AuthGuard>
-      <Dashboard />
-    </AuthGuard>
+    <div>
+      <p>ようこそ {user?.profile.email}</p>
+      <button onClick={() => logout()}>ログアウト</button>
+    </div>
   )
 }
 ```
 
----
+```tsx
+// API 呼び出し（Bearer トークンを付与）
+const { accessToken } = useAuth()
 
-## 4. バージョンアップ方法
-
-### Python サービス
-
-```bash
-# requirements.txt の URL を新バージョンに書き換えて再インストール
-pip install "common-auth @ https://github.com/shun-hosoda/common-auth/releases/download/v1.0.1/common_auth-1.0.1-py3-none-any.whl"
-```
-
-### TypeScript サービス
-
-```bash
-npm install @common-auth/react@1.0.1
+const data = await fetch('/api/protected', {
+  headers: { Authorization: `Bearer ${accessToken}` }
+}).then(r => r.json())
 ```
 
 ---
 
-## 5. バージョン選定の指針
+## 3. バージョン選定の指針
 
 | バージョン変化 | 意味 | 対応方法 |
 |-------------|------|---------|
@@ -167,27 +144,19 @@ npm install @common-auth/react@1.0.1
 
 ---
 
-## 6. リリース一覧の確認
-
-https://github.com/ORG/REPO/releases
-
----
-
-## 7. 問題が発生した場合
+## 4. 問題が発生した場合
 
 1. [Issues](https://github.com/shun-hosoda/common-auth/issues) に報告
-2. `common-auth` リポジトリで修正・テスト
+2. `common-auth` リポジトリで修正・テスト・PR
 3. `.\scripts\release.ps1 -Version 1.x.x -Message "fix: ..."` でリリース
-4. 各サービスでバージョンアップ
+4. 各サービスの `requirements.txt` のバージョン番号を更新してデプロイ
 
 ---
 
-## 8. Keycloak インフラの共有
+## 5. Keycloak インフラ
 
-各サービスは同一の Keycloak インスタンスとレルムを利用します。  
-新規サービスで必要なクライアントを追加する場合は、インフラ担当者に依頼してください。
+各サービスは同一の Keycloak インスタンスを共有します。  
+新規サービス用のクライアントが必要な場合はインフラ担当者に依頼してください。
 
-**共有インフラ:**
-- Keycloak: `http://keycloak.internal:8080` (本番)
-- realm: `common-auth` (マルチテナント対応済み)
+- Keycloak: realm `common-auth`（マルチテナント対応済み）
 - DB (PostgreSQL): グループ・権限データを共有

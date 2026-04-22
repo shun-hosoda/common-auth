@@ -50,17 +50,12 @@ Write-Host "📦 Updating version to $Version..." -ForegroundColor Cyan
 $pyproject = "packages\backend-sdk\pyproject.toml"
 (Get-Content $pyproject) -replace '^version = .*', "version = `"$Version`"" | Set-Content $pyproject
 
-# frontend-sdk: package.json (npm version)
-Push-Location packages\frontend-sdk
-npm version $Version --no-git-tag-version | Out-Null
-Pop-Location
-
 Write-Host "✅ Versions updated" -ForegroundColor Green
 
 # ── コミット & タグ ───────────────────────────────────────────────────────────
 $commitMsg = if ($Message) { "chore: release $tag — $Message" } else { "chore: release $tag" }
 
-git add packages\backend-sdk\pyproject.toml packages\frontend-sdk\package.json
+git add packages\backend-sdk\pyproject.toml
 git commit -m $commitMsg
 git tag -a $tag -m $commitMsg
 
@@ -75,8 +70,6 @@ Write-Host "🚀 Released $tag!" -ForegroundColor Green
 Write-Host ""
 Write-Host "GitHub Actions が以下を自動実行します:"
 Write-Host "  • backend-sdk wheel/sdist → GitHub Releases に添付"
-Write-Host "  • @common-auth/react → GitHub Packages (npm) に publish"
 Write-Host ""
 Write-Host "各サービスでのアップデート:"
-Write-Host "  Python: pip install 'common-auth @ https://github.com/shun-hosoda/common-auth/releases/download/$tag/common_auth-$Version-py3-none-any.whl'"
-Write-Host "  npm:    npm install @common-auth/react@$Version"
+Write-Host "  requirements.txt の URL を v$Version に更新 → pip install -r requirements.txt"

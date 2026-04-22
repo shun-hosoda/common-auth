@@ -7,11 +7,10 @@ on:
 
 permissions:
   contents: write     # GitHub Release 作成
-  packages: write     # GitHub Packages (npm) publish
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────────
-  # 1. Python backend-sdk のテスト & wheel ビルド → GitHub Release に添付
+  # Python backend-sdk のテスト & wheel ビルド → GitHub Release に添付
   # ──────────────────────────────────────────────────────────────────────────
   backend-sdk:
     name: Build & Release backend-sdk (Python)
@@ -37,54 +36,15 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Build wheel & sdist
         working-directory: packages/backend-sdk
         run: python -m build
 
-      - name: Upload wheel/sdist to GitHub Release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             packages/backend-sdk/dist/*.whl
             packages/backend-sdk/dist/*.tar.gz
           generate_release_notes: true
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # 2. frontend-sdk のテスト & npm パッケージ → GitHub Packages に publish
-  # ──────────────────────────────────────────────────────────────────────────
-  frontend-sdk:
-    name: Build & Publish frontend-sdk (npm)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://npm.pkg.github.com"
-          scope: "@common-auth"
-
-      - name: Install & test
-        working-directory: packages/frontend-sdk
-        run: |
-          npm ci
-          npm test -- --forceExit
-
-      - name: Sync version from git tag
-        working-directory: packages/frontend-sdk
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$VERSION" --no-git-tag-version
-
-      - name: Build
-        working-directory: packages/frontend-sdk
-        run: npm run build
-
-      - name: Publish to GitHub Packages
-        working-directory: packages/frontend-sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --access restricted
