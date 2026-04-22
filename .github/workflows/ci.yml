@@ -1,77 +1,80 @@
-# CI/CD Pipeline Template
-# プロジェクトの技術スタックに合わせて編集してください。
-#
-# 使用例:
-#   Node.js: npm ci && npm test && npm run lint
-#   Python:  pip install -r requirements.txt && pytest && ruff check .
-#   Go:      go test ./... && golangci-lint run
-
 name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
-permissions:
-  contents: read
-
 jobs:
-  lint:
+  backend-sdk:
+    name: backend-sdk (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
     steps:
       - uses: actions/checkout@v4
 
-      # --- Node.js の場合 ---
-      # - uses: actions/setup-node@v4
-      #   with:
-      #     node-version: '20'
-      #     cache: 'npm'
-      # - run: npm ci
-      # - run: npm run lint
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-      # --- Python の場合 ---
-      # - uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.12'
-      # - run: pip install -r requirements.txt
-      # - run: ruff check .
+      - name: Install
+        working-directory: packages/backend-sdk
+        run: pip install -e ".[dev]"
 
-      - run: echo "Configure linting for your project"
+      - name: Lint (ruff)
+        working-directory: packages/backend-sdk
+        run: ruff check src/ tests/
 
-  test:
+      - name: Test
+        working-directory: packages/backend-sdk
+        run: python -m pytest tests/ -v --tb=short --cov=src/common_auth --cov-report=term-missing
+
+  frontend-sdk:
+    name: frontend-sdk (Node 20)
     runs-on: ubuntu-latest
-    needs: lint
+
     steps:
       - uses: actions/checkout@v4
 
-      # --- Node.js の場合 ---
-      # - uses: actions/setup-node@v4
-      #   with:
-      #     node-version: '20'
-      #     cache: 'npm'
-      # - run: npm ci
-      # - run: npm test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      # --- Python の場合 ---
-      # - uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.12'
-      # - run: pip install -r requirements.txt
-      # - run: pytest --cov
+      - name: Install
+        working-directory: packages/frontend-sdk
+        run: npm ci
 
-      - run: echo "Configure testing for your project"
+      - name: Typecheck
+        working-directory: packages/frontend-sdk
+        run: npx tsc --noEmit
 
-  build:
+      - name: Test
+        working-directory: packages/frontend-sdk
+        run: npm test -- --forceExit
+
+  react-example:
+    name: react-app build
     runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main'
+
     steps:
       - uses: actions/checkout@v4
 
-      # --- ビルド & デプロイ ---
-      # - run: npm run build
-      # - run: docker build -t app .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      - run: echo "Configure build for your project"
+      - name: Install
+        working-directory: examples/react-app
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: examples/react-app
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: examples/react-app
+        run: npm run build

@@ -1,0 +1,5 @@
+# .npmrc.example — このファイルを .npmrc にコピーして GITHUB_TOKEN を設定する
+# ⚠️ .npmrc (実際のトークンを含む) は .gitignore に追加すること
+
+@common-auth:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
